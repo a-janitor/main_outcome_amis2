@@ -1,0 +1,27 @@
+# Data files
+*.RDS
+*.rds
+*.sav
+*.csv
+*.dat
+*.dta
+*.xlsx
+
+# Mplus outputs
+*.out
+*.gh5
+*.res
+*.fscores
+
+# Manuscripts and reports
+*.docx
+*.pdf
+
+# R local files
+.Rhistory
+.RData
+.Rproj.user/
+
+# OS files
+.DS_Store
+Thumbs.db
