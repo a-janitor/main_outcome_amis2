@@ -4,31 +4,31 @@ This repository is only for code, syntax, and non-sensitive documentation.
 
 Do not store data, outputs, manuscripts, or participant-level information in this repository.
 
----
+------------------------------------------------------------------------
 
 ## 1. Before starting work
 
 Always update your local version first:
 
-```bash
+``` bash
 git pull
 ```
 
----
+------------------------------------------------------------------------
 
 ## 2. Check what has changed
 
-```bash
+``` bash
 git status
 ```
 
----
+------------------------------------------------------------------------
 
 ## 3. Save your changes to Git
 
 After editing files, run:
 
-```bash
+``` bash
 git add .
 git commit -m "Describe what changed"
 git push
@@ -36,19 +36,19 @@ git push
 
 Example:
 
-```bash
+``` bash
 git add .
 git commit -m "Add Mplus syntax for internalizing model"
 git push
 ```
 
----
+------------------------------------------------------------------------
 
 ## 4. Standard workflow
 
 Use this every time:
 
-```bash
+``` bash
 git pull
 # work on files
 git status
@@ -57,32 +57,32 @@ git commit -m "Describe what changed"
 git push
 ```
 
----
+------------------------------------------------------------------------
 
 ## 5. Clone this repository on a new computer
 
-```bash
+``` bash
 git clone https://github.com/a-janitor/main_outcome_amis2.git
 ```
 
 Then open the `.Rproj` file in RStudio.
 
----
+------------------------------------------------------------------------
 
 ## 6. If Git asks who you are
 
-```bash
+``` bash
 git config --global user.name "Jan Keil"
 git config --global user.email "jan.keil1984@googlemail.com"
 ```
 
----
+------------------------------------------------------------------------
 
 ## 7. Files that belong in Git
 
 Allowed:
 
-```text
+``` text
 R scripts
 Mplus .inp files
 README files
@@ -91,13 +91,13 @@ non-sensitive notes
 empty templates
 ```
 
----
+------------------------------------------------------------------------
 
 ## 8. Files that do NOT belong in Git
 
 Do not commit:
 
-```text
+``` text
 participant-level data
 analysis datasets
 .RDS files
@@ -113,7 +113,7 @@ PDF reports
 anything with personal or sensitive information
 ```
 
----
+------------------------------------------------------------------------
 
 ## 9. If you accidentally see data files in git status
 
@@ -121,7 +121,7 @@ Do not commit them.
 
 Check that `.gitignore` contains these lines:
 
-```gitignore
+``` gitignore
 *.RDS
 *.rds
 *.sav
@@ -142,19 +142,19 @@ Check that `.gitignore` contains these lines:
 Thumbs.db
 ```
 
----
+------------------------------------------------------------------------
 
 ## 10. Rule of thumb
 
 Before starting:
 
-```bash
+``` bash
 git pull
 ```
 
 After finishing:
 
-```bash
+``` bash
 git add .
 git commit -m "Describe what changed"
 git push
