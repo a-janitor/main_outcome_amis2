@@ -15,14 +15,18 @@ required_packages <- c(
   # Data handling
   "dplyr",       # Data manipulation
   "tidyr",       # Data reshaping
+  "purrr",       # Functional programming, e.g., map functions
+  "stringr",     # String handling
+  "tibble",      # Tidy data frames
   
   # Dates
   "lubridate",   # Date handling, e.g., age calculations
   
   # Statistics / modeling
   "car",
-  "lavaan",
+  "lavaan",      # CFA models for balanced parcel splits
   "lcmm",
+  "lavaan.mi",
   
   # Visualization
   "ggplot2",
@@ -33,6 +37,7 @@ required_packages <- c(
 )
 
 # Install missing packages and load all required packages
+
 installed_packages <- rownames(installed.packages())
 
 for (pkg in required_packages) {

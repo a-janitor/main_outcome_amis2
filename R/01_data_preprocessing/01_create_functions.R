@@ -238,5 +238,201 @@ check_sdq_combination <- function(data, informant, timepoint) {
   )
 }
 
+###############################################################################
+# FATEMES FUNCTIONS
+###############################################################################
+
+### ------------------------------------------------------------------------ ###
+### 1. FUNCTION: Convert SDQ item variables to numeric 0-2 format
+### ------------------------------------------------------------------------ ###
+
+convert_sdq_items_to_numeric <- function(data, informant, timepoint) {
+  
+  pattern_items <- paste0("_", informant, "_", timepoint, "$")
+  
+  item_vars <- names(data)[
+    grepl(pattern_items, names(data), ignore.case = TRUE)
+  ]
+  
+  if (length(item_vars) == 0) {
+    warning(
+      "No SDQ item variables found for informant = ",
+      informant,
+      ", timepoint = ",
+      timepoint
+    )
+    return(data)
+  }
+  
+  data <- data %>%
+    dplyr::mutate(
+      dplyr::across(
+        dplyr::all_of(item_vars),
+        ~ {
+          x <- as.character(.)
+          x[x == ""] <- NA
+          
+          if (all(x %in% c("0", "1", "2", NA))) {
+            as.numeric(x)
+          } else {
+            as.numeric(factor(x, levels = unique(na.omit(x)))) - 1
+          }
+        }
+      )
+    )
+  
+  return(data)
+}
+
+### ------------------------------------------------------------------------ ###
+### 2. CREATE CROSS-INFORMANT MINI-ITEMS
+### ------------------------------------------------------------------------ ###
+
+create_crossinformant_mini_items <- function(data,
+                                             item_map,
+                                             reporters = c("b", "k", "p", "t"),
+                                             waves = c("t2", "t5"),
+                                             min_reporters_per_item = 2) {
+  
+  all_stems <- unique(unlist(item_map))
+  
+  for (w in waves) {
+    for (stem in all_stems) {
+      
+      these_cols <- paste0(stem, "_", reporters, "_", w)
+      these_cols <- these_cols[these_cols %in% names(data)]
+      
+      if (length(these_cols) == 0) next
+      
+      mat <- data %>%
+        dplyr::select(dplyr::all_of(these_cols))
+      
+      n_avail <- apply(mat, 1, function(x) sum(!is.na(x)))
+      mini <- apply(mat, 1, function(x) mean(x, na.rm = TRUE))
+      
+      mini[n_avail < min_reporters_per_item] <- NA
+      mini[n_avail == 0] <- NA
+      
+      data[[paste0("mini_", stem, "_", w)]] <- mini
+    }
+  }
+  
+  return(data)
+}
 
 
+### ------------------------------------------------------------------------ ###
+### 3. BALANCED SPLIT USING CFA LOADINGS
+### ------------------------------------------------------------------------ ###
+
+balanced_split_cfa <- function(data, stems, wave_for_cfa = "t2") {
+  
+  mini_vars <- paste0("mini_", stems, "_", wave_for_cfa)
+  mini_vars <- mini_vars[mini_vars %in% names(data)]
+  
+  if (length(mini_vars) < 5) {
+    warning("Not all 5 mini-items found. Using fixed 3+2 split.")
+    return(list(A = stems[c(1, 3, 5)], B = stems[c(2, 4)]))
+  }
+  
+  cfa_model <- paste0("F =~ ", paste(mini_vars, collapse = " + "))
+  
+  fit <- tryCatch(
+    lavaan::cfa(
+      cfa_model,
+      data = data,
+      missing = "fiml",
+      std.lv = TRUE
+    ),
+    error = function(e) NULL
+  )
+  
+  if (is.null(fit) || !lavaan::lavInspect(fit, "converged")) {
+    warning("CFA failed. Using fixed 3+2 split.")
+    return(list(A = stems[c(1, 3, 5)], B = stems[c(2, 4)]))
+  }
+  
+  load_tbl <- lavaan::parameterEstimates(fit, standardized = TRUE) %>%
+    dplyr::filter(op == "=~") %>%
+    dplyr::select(rhs, std.all) %>%
+    dplyr::mutate(
+      stem = rhs,
+      stem = stringr::str_remove(stem, "^mini_"),
+      stem = stringr::str_remove(stem, paste0("_", wave_for_cfa, "$"))
+    ) %>%
+    dplyr::arrange(dplyr::desc(std.all))
+  
+  ordered_stems <- load_tbl$stem
+  
+  A <- ordered_stems[seq(1, length(ordered_stems), by = 2)]
+  B <- ordered_stems[seq(2, length(ordered_stems), by = 2)]
+  
+  return(list(A = A, B = B))
+}
+
+
+### ------------------------------------------------------------------------ ###
+### 4. CREATE SDQ PARCELS
+### ------------------------------------------------------------------------ ###
+
+create_sdq_parcels <- function(data,
+                               item_map,
+                               parcel_plan,
+                               waves = c("t2", "t5")) {
+  
+  for (w in waves) {
+    for (sc in names(item_map)) {
+      
+      A_stems <- parcel_plan[[sc]]$A
+      B_stems <- parcel_plan[[sc]]$B
+      
+      miniA <- paste0("mini_", A_stems, "_", w)
+      miniB <- paste0("mini_", B_stems, "_", w)
+      
+      miniA <- miniA[miniA %in% names(data)]
+      miniB <- miniB[miniB %in% names(data)]
+      
+      data[[paste0(sc, "_parA_", w)]] <-
+        if (length(miniA) > 0) rowMeans(data[miniA], na.rm = TRUE) else NA
+      
+      data[[paste0(sc, "_parB_", w)]] <-
+        if (length(miniB) > 0) rowMeans(data[miniB], na.rm = TRUE) else NA
+    }
+  }
+  
+  return(data)
+}
+
+
+### ------------------------------------------------------------------------ ###
+### 5. CHECK SDQ PARCEL VARIABLES
+### ------------------------------------------------------------------------ ###
+
+check_sdq_parcels <- function(data, waves = c("t2", "t5")) {
+  
+  parcel_vars <- names(data)[
+    grepl("_(parA|parB)_t[25]$", names(data))
+  ]
+  
+  parcel_overview <- tibble::tibble(
+    variable = parcel_vars
+  ) %>%
+    tidyr::extract(
+      variable,
+      into = c("scale", "parcel", "wave"),
+      regex = "^(emo|con|hyp|peer|pros)_(parA|parB)_(t[25])$",
+      remove = FALSE
+    ) %>%
+    dplyr::arrange(wave, scale, parcel)
+  
+  parcel_count <- parcel_overview %>%
+    dplyr::count(wave, scale, name = "n_parcels")
+  
+  return(
+    list(
+      parcel_vars = parcel_vars,
+      parcel_overview = parcel_overview,
+      parcel_count = parcel_count
+    )
+  )
+}
