@@ -2,6 +2,7 @@ library(dplyr)
 library(stringr)
 library(tibble)
 library(readr)
+library(readxl)
 
 ##### GET DATA #####
 data_path <- "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/MAIN OUTCOME/02_data/02_data_Prep/AMIS_merged_analysis_dataset.xlsx"
