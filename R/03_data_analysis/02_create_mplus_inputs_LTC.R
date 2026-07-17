@@ -1741,8 +1741,9 @@ input_syntax <- paste0(
   "ANALYSIS:\n",
   "  TYPE = MIXTURE;\n",
   "  ESTIMATOR = MLR;\n",
-  "  STARTS = 0;\n",
-  "  OPTSEED = 461866;\n\n",
+  "  STARTS = 4000 1000;\n",
+  "  STITERATIONS = 20;\n",
+  "  LRTSTARTS = 0 0 1000 250;\n\n",
   
   "MODEL:\n",
   "  %OVERALL%\n\n",
@@ -1782,7 +1783,8 @@ input_syntax <- paste0(
   "\n\n",
   
   "OUTPUT:\n",
-  "  TECH1;\n\n",
+  "  TECH11;\n\n",
+  "  TECH14;\n\n",
   
   "SAVEDATA:\n",
   "  FILE = 18_mt_burden_quadratic_3class_cprob.dat;\n",
@@ -3945,6 +3947,187 @@ stopifnot(
 cat(
   "Saved Table S10:\n",
   table_s10_word_file,
+  "\n",
+  sep = ""
+)
+
+#-------------------------------------------------------------------------
+##### ARCHIVE AND COPY MALTREATMENT MPLUS FILES #####
+#-------------------------------------------------------------------------
+
+##### DEFINE FILE TRANSFER SETTINGS ####
+
+mplus_transfer_source_dir <- mplus_input_dir
+
+mplus_archive_dir <- file.path(
+  "C:/MPLUS/Archive",
+  "04_maltreatment",
+  format(
+    Sys.Date(),
+    "%Y-%m-%d"
+  )
+)
+
+mplus_transfer_model_pattern <- paste0(
+  "^(",
+  paste(
+    c(
+      "09",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14",
+      "15",
+      "16",
+      "17",
+      "18",
+      "18a",
+      "19"
+    ),
+    collapse = "|"
+  ),
+  ")_.*\\.(inp|out|dat)$"
+)
+
+##### CREATE TARGET DIRECTORIES ####
+
+invisible(
+  sapply(
+    c(
+      mplus_archive_dir,
+      github_maltreatment_dir,
+      mplus_results_dir_mal
+    ),
+    dir.create,
+    recursive = TRUE,
+    showWarnings = FALSE
+  )
+)
+
+##### LOCATE MALTREATMENT MPLUS FILES ####
+
+mplus_transfer_files <- list.files(
+  path = mplus_transfer_source_dir,
+  pattern = mplus_transfer_model_pattern,
+  full.names = TRUE,
+  ignore.case = TRUE
+)
+
+stopifnot(
+  length(mplus_transfer_files) > 0
+)
+
+mplus_transfer_table <- tibble(
+  source_file = mplus_transfer_files,
+  file_name = basename(
+    source_file
+  ),
+  file_extension = tools::file_ext(
+    source_file
+  )
+)
+
+print(
+  mplus_transfer_table,
+  n = Inf
+)
+
+##### COPY ALL FILES TO MPLUS ARCHIVE ####
+
+archive_copy_success <- file.copy(
+  from = mplus_transfer_table$source_file,
+  to = mplus_archive_dir,
+  overwrite = TRUE
+)
+
+stopifnot(
+  all(
+    archive_copy_success
+  )
+)
+
+##### COPY INPUT FILES TO GITHUB ####
+
+mplus_input_files_to_copy <- mplus_transfer_table |>
+  filter(
+    file_extension == "inp"
+  )
+
+input_copy_success <- file.copy(
+  from = mplus_input_files_to_copy$source_file,
+  to = github_maltreatment_dir,
+  overwrite = TRUE
+)
+
+stopifnot(
+  all(
+    input_copy_success
+  )
+)
+
+##### COPY OUTPUT AND SAVEDATA FILES TO SEADRIVE RESULTS ####
+
+mplus_output_files_to_copy <- mplus_transfer_table |>
+  filter(
+    file_extension %in% c(
+      "out",
+      "dat"
+    )
+  )
+
+output_copy_success <- file.copy(
+  from = mplus_output_files_to_copy$source_file,
+  to = mplus_results_dir_mal,
+  overwrite = TRUE
+)
+
+stopifnot(
+  all(
+    output_copy_success
+  )
+)
+
+##### CHECK COPIED FILES ####
+
+stopifnot(
+  all(
+    file.exists(
+      file.path(
+        mplus_archive_dir,
+        mplus_transfer_table$file_name
+      )
+    )
+  ),
+  all(
+    file.exists(
+      file.path(
+        github_maltreatment_dir,
+        mplus_input_files_to_copy$file_name
+      )
+    )
+  ),
+  all(
+    file.exists(
+      file.path(
+        mplus_results_dir_mal,
+        mplus_output_files_to_copy$file_name
+      )
+    )
+  )
+)
+
+##### DISPLAY TRANSFER SUMMARY ####
+
+cat(
+  "Archived files to:\n",
+  mplus_archive_dir,
+  "\n\n",
+  "Copied Mplus inputs to GitHub:\n",
+  github_maltreatment_dir,
+  "\n\n",
+  "Copied Mplus outputs and savedata files to SeaDrive results:\n",
+  mplus_results_dir_mal,
   "\n",
   sep = ""
 )
