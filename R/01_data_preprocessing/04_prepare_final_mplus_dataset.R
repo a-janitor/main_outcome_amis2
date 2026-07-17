@@ -682,45 +682,135 @@ stopifnot(
   sum(is.na(dat_mplus_export)) == 0
 )
 
-##### CREATE OUTPUT DIRECTORY ####
+##### DEFINE OUTPUT DIRECTORIES ####
+
 output_dir <- paste0(
   "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/",
   "MAIN OUTCOME/02_data/02_data_Prep/MPlus_Dataset"
 )
 
-dir.create(
-  output_dir,
-  recursive = TRUE,
-  showWarnings = FALSE
+mplus_input_dir <- "C:/MPLUS/Inputs"
+
+invisible(
+  sapply(
+    c(
+      output_dir,
+      mplus_input_dir
+    ),
+    dir.create,
+    recursive = TRUE,
+    showWarnings = FALSE
+  )
 )
 
 ##### SAVE MPLUS DATASET ####
+
+mplus_data_file <- file.path(
+  output_dir,
+  "AMIS_mplus_dataset.dat"
+)
+
 write.table(
   dat_mplus_export,
-  file = file.path(
-    output_dir,
-    "AMIS_mplus_dataset.dat"
-  ),
+  file = mplus_data_file,
   sep = "\t",
   row.names = FALSE,
   col.names = FALSE,
   quote = FALSE
 )
 
-##### CREATE MPLUS NAMES SYNTAX ####
-mplus_names <- paste(
-  names(dat_mplus),
+##### SAVE MPLUS VARIABLE NAMES ####
+
+mplus_names <- names(dat_mplus)
+
+mplus_names_file <- file.path(
+  output_dir,
+  "AMIS_mplus_names.rds"
+)
+
+saveRDS(
+  mplus_names,
+  file = mplus_names_file
+)
+
+##### SAVE MPLUS NAMES SYNTAX ####
+
+mplus_names_text <- paste(
+  mplus_names,
   collapse = "\n    "
+)
+
+mplus_names_syntax_file <- file.path(
+  output_dir,
+  "AMIS_mplus_names.txt"
 )
 
 writeLines(
   c(
-    "NAMES =",
-    paste0("    ", mplus_names),
+    "NAMES ARE",
+    paste0(
+      "    ",
+      mplus_names_text
+    ),
     ";"
   ),
-  file.path(
-    output_dir,
-    "AMIS_mplus_names.txt"
-  )
+  mplus_names_syntax_file
+)
+
+##### COPY MPLUS FILES TO LOCAL INPUT DIRECTORY ####
+
+files_to_copy <- c(
+  mplus_data_file,
+  mplus_names_file,
+  mplus_names_syntax_file
+)
+
+copy_success <- file.copy(
+  from = files_to_copy,
+  to = mplus_input_dir,
+  overwrite = TRUE
+)
+
+stopifnot(
+  all(copy_success)
+)
+
+##### CHECK LOCAL MPLUS FILES ####
+
+local_mplus_data_file <- file.path(
+  mplus_input_dir,
+  "AMIS_mplus_dataset.dat"
+)
+
+local_mplus_names_file <- file.path(
+  mplus_input_dir,
+  "AMIS_mplus_names.rds"
+)
+
+local_mplus_names_syntax_file <- file.path(
+  mplus_input_dir,
+  "AMIS_mplus_names.txt"
+)
+
+stopifnot(
+  file.exists(local_mplus_data_file),
+  file.exists(local_mplus_names_file),
+  file.exists(local_mplus_names_syntax_file)
+)
+
+##### CHECK DATASET AND VARIABLE NAMES ####
+
+number_of_data_columns <- length(
+  strsplit(
+    readLines(
+      local_mplus_data_file,
+      n = 1
+    ),
+    split = "\t",
+    fixed = TRUE
+  )[[1]]
+)
+
+stopifnot(
+  number_of_data_columns == length(mplus_names)
 )
