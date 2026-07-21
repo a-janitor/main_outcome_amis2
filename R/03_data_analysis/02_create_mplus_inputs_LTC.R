@@ -2312,19 +2312,139 @@ stopifnot(
 )
 
 dat_mplus_m18 <- dat_mplus |>
-  left_join(
+  inner_join(
     m18_classes_mplus,
     by = "SIC_N"
   )
-names(dat_mplus_m18)[520:527]
+
+##### CHECK WHICH MPLUS CASES HAVE NO M18 CLASS #####
+
+stopifnot(
+  nrow(dat_mplus_m18) == nrow(m18_classes_mplus),
+  nrow(dat_mplus_m18) == 849,
+  anyDuplicated(dat_mplus_m18$SIC_N) == 0,
+  !anyNA(dat_mplus_m18$m18_cls),
+  all(vapply(dat_mplus_m18, is.numeric, logical(1))),
+  !"mt_class_label" %in% names(dat_mplus_m18),
+  all(c("m18_cls", "m18_p1", "m18_p2", "m18_p3", "m18_pmx") %in%
+        names(dat_mplus_m18))
+)
+
+##### FINAL AUDIT: CHECK M18 CLASS MERGE #####
+
+m18_merge_audit <- dat_mplus_m18 |>
+  select(
+    SIC_N,
+    m18_cls,
+    m18_p1,
+    m18_p2,
+    m18_p3,
+    m18_pmx
+  ) |>
+  left_join(
+    m18_classes_mplus,
+    by = "SIC_N",
+    suffix = c("_merged", "_source")
+  )
+
+stopifnot(
+  nrow(m18_merge_audit) == nrow(m18_classes_mplus),
+  anyDuplicated(m18_merge_audit$SIC_N) == 0,
+  !anyNA(m18_merge_audit$m18_cls_merged),
+  all(m18_merge_audit$m18_cls_merged == m18_merge_audit$m18_cls_source),
+  all(abs(m18_merge_audit$m18_p1_merged - m18_merge_audit$m18_p1_source) < 1e-10),
+  all(abs(m18_merge_audit$m18_p2_merged - m18_merge_audit$m18_p2_source) < 1e-10),
+  all(abs(m18_merge_audit$m18_p3_merged - m18_merge_audit$m18_p3_source) < 1e-10),
+  all(abs(m18_merge_audit$m18_pmx_merged - m18_merge_audit$m18_pmx_source) < 1e-10)
+)
+
+##### CHECK WHETHER ASSIGNED CLASS MATCHES HIGHEST POSTERIOR PROBABILITY #####
+
+m18_classes_mplus |>
+  mutate(
+    max_prob_class = max.col(
+      cbind(
+        m18_p1,
+        m18_p2,
+        m18_p3
+      ),
+      ties.method = "first"
+    ),
+    class_matches_max_prob = m18_cls == max_prob_class
+  ) |>
+  count(
+    class_matches_max_prob
+  ) |>
+  print(
+    n = Inf
+  )
+
+stopifnot(
+  all(
+    m18_classes_mplus$m18_cls ==
+      max.col(
+        cbind(
+          m18_classes_mplus$m18_p1,
+          m18_classes_mplus$m18_p2,
+          m18_classes_mplus$m18_p3
+        ),
+        ties.method = "first"
+      )
+  )
+)
+
+cat(
+  "M18 class merge audit passed.\n"
+)
+
+m18_classes_mplus$m18_cls ==
+  max.col(
+    cbind(
+      m18_classes_mplus$m18_p1,
+      m18_classes_mplus$m18_p2,
+      m18_classes_mplus$m18_p3
+    ),
+    ties.method = "first"
+  )
+
+##### CHECK MERGED MPLUS DATASET ####
+
+stopifnot(
+  nrow(dat_mplus_m18) == nrow(dat_mplus),
+  anyDuplicated(dat_mplus_m18$SIC_N) == 0,
+  all(vapply(dat_mplus_m18, is.numeric, logical(1))),
+  !"mt_class_label" %in% names(dat_mplus_m18),
+  all(c("m18_cls", "m18_p1", "m18_p2", "m18_p3", "m18_pmx") %in%
+        names(dat_mplus_m18)),
+  all(nchar(names(dat_mplus_m18)) <= 8)
+)
+
+tail(
+  names(dat_mplus_m18),
+  10
+)
 
 #-------------------------------------------------------------------------
 ##### SAVE MPLUS DATASET WITH M18 CLASSES #####
 #-------------------------------------------------------------------------
 
+##### DEFINE LABEL-FREE DATASET FOR MPLUS EXPORT ####
+
+dat_mplus_m18_for_export <- dat_mplus_m18 |>
+  select(
+    -any_of("mt_class_label")
+  )
+
+stopifnot(
+  !"mt_class_label" %in% names(dat_mplus_m18_for_export),
+  all(vapply(dat_mplus_m18_for_export, is.numeric, logical(1))),
+  all(nchar(names(dat_mplus_m18_for_export)) <= 8),
+  anyDuplicated(names(dat_mplus_m18_for_export)) == 0
+)
+
 ##### REPLACE MISSING VALUES FOR MPLUS EXPORT ####
 
-dat_mplus_m18_export <- dat_mplus_m18 |>
+dat_mplus_m18_export <- dat_mplus_m18_for_export |>
   mutate(
     across(
       everything(),
@@ -2382,7 +2502,7 @@ write.table(
 ##### SAVE MPLUS VARIABLE NAMES ####
 
 mplus_names_m18 <- names(
-  dat_mplus_m18
+  dat_mplus_m18_for_export
 )
 
 saveRDS(
@@ -2398,7 +2518,7 @@ writeLines(
 ##### SAVE R VERSION WITH ORIGINAL MISSING VALUES ####
 
 saveRDS(
-  dat_mplus_m18,
+  dat_mplus_m18_for_export,
   mplus_rds_file_m18
 )
 
@@ -2420,10 +2540,10 @@ saved_names_m18 <- readRDS(
 stopifnot(
   identical(
     saved_names_m18,
-    names(dat_mplus_m18)
+    names(dat_mplus_m18_for_export)
   ),
   length(saved_names_m18) ==
-    ncol(dat_mplus_m18)
+    ncol(dat_mplus_m18_for_export)
 )
 
 ##### CHECK NUMBER OF EXPORTED COLUMNS ####
@@ -2452,10 +2572,10 @@ cat(
   mplus_names_file_m18,
   "\n",
   "Rows: ",
-  nrow(dat_mplus_m18),
+  nrow(dat_mplus_m18_for_export),
   "\n",
   "Columns: ",
-  ncol(dat_mplus_m18),
+  ncol(dat_mplus_m18_for_export),
   "\n",
   sep = ""
 )
@@ -2468,12 +2588,28 @@ copy_success <- file.copy(
   overwrite = TRUE
 )
 
-stopifnot(copy_success)
+stopifnot(
+  copy_success
+)
 
+##### COPY M18 MPLUS NAMES FILES TO SEADRIVE ####
 
+file.copy(
+  from = c(
+    mplus_names_file_m18,
+    mplus_names_text_file_m18,
+    mplus_rds_file_m18
+  ),
+  to = seadrive_mplus_data_dir,
+  overwrite = TRUE
+)
 
 ##### MERGE M18 CLASSES WITH ORIGINAL EXCEL DATASET ####
-dat_original <- read_excel("C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/MAIN OUTCOME/02_data/02_data_Prep/AMIS_merged_analysis_dataset.xlsx")
+
+dat_original <- read_excel(
+  "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/MAIN OUTCOME/02_data/02_data_Prep/AMIS_merged_analysis_dataset.xlsx"
+)
+
 ##### RECREATE ID LOOKUP ####
 
 id_lookup <- dat_original |>
@@ -2487,6 +2623,103 @@ stopifnot(
   anyDuplicated(id_lookup$sic) == 0,
   anyDuplicated(id_lookup$SIC_N) == 0
 )
+
+##### FINAL AUDIT: CHECK SIC TO SIC_N LOOKUP #####
+
+stopifnot(
+  nrow(id_lookup) == n_distinct(dat_original$sic),
+  anyDuplicated(id_lookup$sic) == 0,
+  anyDuplicated(id_lookup$SIC_N) == 0,
+  min(id_lookup$SIC_N) == 1,
+  max(id_lookup$SIC_N) == nrow(id_lookup)
+)
+
+##### CHECK WHETHER ALL M18 SIC_N VALUES CAN BE TRANSLATED BACK TO SIC #####
+
+m18_lookup_audit <- m18_class_assignments |>
+  left_join(
+    id_lookup,
+    by = "SIC_N"
+  )
+
+stopifnot(
+  nrow(m18_lookup_audit) == nrow(m18_class_assignments),
+  anyDuplicated(m18_lookup_audit$SIC_N) == 0,
+  !anyNA(m18_lookup_audit$sic)
+)
+
+##### CHECK EXPECTED NON-M18 CASES IN ORIGINAL LOOKUP #####
+
+original_without_m18 <- id_lookup |>
+  anti_join(
+    m18_class_assignments,
+    by = "SIC_N"
+  )
+
+nrow(original_without_m18)
+
+original_without_m18 |>
+  select(
+    sic,
+    SIC_N
+  ) |>
+  print(
+    n = Inf
+  )
+
+stopifnot(
+  nrow(original_without_m18) == 15
+)
+
+##### CHECK EXCEL MERGE AGAINST M18 SOURCE AFTER SIC LOOKUP #####
+
+dat_original_m18_audit <- dat_original |>
+  left_join(
+    m18_lookup_audit |>
+      select(
+        sic,
+        mt_class,
+        mt_prob_class1,
+        mt_prob_class2,
+        mt_prob_class3,
+        mt_prob_max,
+        mt_class_label
+      ),
+    by = "sic"
+  )
+
+m18_excel_source_check <- dat_original_m18_audit |>
+  filter(
+    !is.na(mt_class)
+  ) |>
+  left_join(
+    m18_lookup_audit |>
+      select(
+        sic,
+        mt_class_source = mt_class,
+        mt_prob_class1_source = mt_prob_class1,
+        mt_prob_class2_source = mt_prob_class2,
+        mt_prob_class3_source = mt_prob_class3,
+        mt_prob_max_source = mt_prob_max,
+        mt_class_label_source = mt_class_label
+      ),
+    by = "sic"
+  )
+
+stopifnot(
+  nrow(m18_excel_source_check) == nrow(m18_class_assignments),
+  all(m18_excel_source_check$mt_class == m18_excel_source_check$mt_class_source),
+  all(abs(m18_excel_source_check$mt_prob_class1 - m18_excel_source_check$mt_prob_class1_source) < 1e-10),
+  all(abs(m18_excel_source_check$mt_prob_class2 - m18_excel_source_check$mt_prob_class2_source) < 1e-10),
+  all(abs(m18_excel_source_check$mt_prob_class3 - m18_excel_source_check$mt_prob_class3_source) < 1e-10),
+  all(abs(m18_excel_source_check$mt_prob_max - m18_excel_source_check$mt_prob_max_source) < 1e-10),
+  all(m18_excel_source_check$mt_class_label == m18_excel_source_check$mt_class_label_source)
+)
+
+cat(
+  "SIC_N lookup audit passed.\n"
+)
+
 
 ##### ADD ORIGINAL ID TO CLASS ASSIGNMENTS ####
 
@@ -2513,7 +2746,8 @@ dat_original_m18 <- dat_original |>
 
 stopifnot(
   nrow(dat_original_m18) == nrow(dat_original),
-  anyDuplicated(dat_original_m18$sic) == 0
+  anyDuplicated(dat_original_m18$sic) == 0,
+  "mt_class_label" %in% names(dat_original_m18)
 )
 
 ##### SAVE NEW EXCEL DATASET ####
@@ -2552,7 +2786,6 @@ cat(
   "\n",
   sep = ""
 )
-  
 #-------------------------------------------------------------------------
 ##### PLOT M18 THREE-CLASS BURDEN TRAJECTORIES #####
 #-------------------------------------------------------------------------
