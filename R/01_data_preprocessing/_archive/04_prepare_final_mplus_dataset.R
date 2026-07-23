@@ -1,56 +1,49 @@
-source(
-  "C:/Users/keil/Documents/main_outcome_amis2/R/03_data_analysis/00_setup.R"
-)
+library(dplyr)
+library(stringr)
+library(tibble)
+library(readr)
+library(readxl)
 
-#-------------------------------------------------------------------------
-##### LOAD AND CHECK BASE DATASET #####
-#-------------------------------------------------------------------------
+##### GET DATA #####
+data_path <- "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/MAIN OUTCOME/02_data/02_data_Prep/AMIS_merged_analysis_dataset.xlsx"
+dat_raw <- read_excel(data_path)
 
-assert_file_exists(
-  master_excel_file,
-  "Base Excel dataset"
-)
+##### INSPECT DATA ####
+dim(dat_raw)
+names(dat_raw)
 
-dat_raw <- readxl::read_excel(
-  master_excel_file,
-  na = c("", "NA")
-)
+##### CHECK DUPLICATES
+duplicate_ids <- dat_raw |>
+  count(sic) |>
+  filter(n > 1)
 
-required_base_variables <- c(
-  "sic",
-  "mt_status_t5"
-)
+duplicate_ids
 
-missing_base_variables <- setdiff(
-  required_base_variables,
-  names(dat_raw)
-)
-
-if (length(missing_base_variables) > 0) {
-  stop(
-    "Missing required variables: ",
-    paste(missing_base_variables, collapse = ", ")
+##### DEFINE FINAL ANALYSIS SAMPLE ####
+dat_analysis <- dat_raw |>
+  filter(
+    !is.na(sdq_emotion_k_t5),
+    !is.na(sdq_emotion_b_t5)
   )
-}
 
-if (anyNA(dat_raw$sic)) {
-  stop("Missing values found in sic.")
-}
-
-if (anyDuplicated(dat_raw$sic) > 0) {
-  stop("Duplicated values found in sic.")
-}
-
-stopifnot(
-  nrow(dat_raw) > 0,
-  ncol(dat_raw) > 0
-)
+dim(dat_analysis)
 
 
-#-------------------------------------------------------------------------
-##### STORE ORIGINAL VARIABLE INFORMATION #####
-#-------------------------------------------------------------------------
+##### CHECK DATA COMPLETENESS FOR EACH VAR ####
+completeness_table <- tibble(
+  variable = names(dat_analysis),
+  complete_n = colSums(!is.na(dat_analysis)),
+  complete_pct = round(colMeans(!is.na(dat_analysis)) * 100, 1),
+  missing_n = colSums(is.na(dat_analysis)),
+  missing_pct = round(colMeans(is.na(dat_analysis)) * 100, 1)
+) |>
+  arrange(complete_pct)
 
+View(completeness_table)
+
+##### RENAME VARIABLES ##########
+
+##### STORE ORIGINAL VARIABLE NAMES ####
 original_names <- names(dat_raw)
 
 ##### RENAME ALL VARIABLES FOR MPLUS ####
@@ -584,11 +577,8 @@ dat_mplus <- dat_raw |>
     aget5m = mt_age_t5
   )
 
-#-------------------------------------------------------------------------
-##### CREATE INITIAL VARIABLE DICTIONARY #####
-#-------------------------------------------------------------------------
-
-variable_dictionary <- tibble::tibble(
+##### CREATE INITIAL VARIABLE DICTIONARY ####
+variable_dictionary <- tibble(
   original_position = seq_along(original_names),
   original_name = original_names,
   mplus_name = names(dat_mplus),
@@ -599,205 +589,91 @@ variable_dictionary <- tibble::tibble(
   )
 )
 
-
-#-------------------------------------------------------------------------
-##### CREATE AND SAVE NUMERIC ID LOOKUP #####
-#-------------------------------------------------------------------------
-
+##### RECODE T5 STATUS AND CREATE NUMERIC ID ####
 id_dictionary <- dat_mplus |>
-  dplyr::transmute(
-    sic = trimws(
-      as.character(SIC_N)
-    )
-  ) |>
-  dplyr::distinct() |>
-  dplyr::arrange(
-    sic
-  ) |>
-  dplyr::mutate(
-    SIC_N = dplyr::row_number()
+  distinct(SIC_N) |>
+  arrange(SIC_N) |>
+  mutate(
+    SIC_num = row_number()
   )
 
-stopifnot(
-  nrow(id_dictionary) == nrow(dat_raw),
-  !anyNA(id_dictionary$sic),
-  anyDuplicated(id_dictionary$sic) == 0,
-  anyDuplicated(id_dictionary$SIC_N) == 0
-)
-
-sic_n_lookup_file <- file.path(
-  data_prep_dir,
-  "AMIS_SIC_N_lookup.xlsx"
-)
-
-writexl::write_xlsx(
-  id_dictionary,
-  sic_n_lookup_file
-)
-
-
-#-------------------------------------------------------------------------
-##### RECODE T5 STATUS AND RETAIN MPLUS-COMPATIBLE VARIABLES #####
-#-------------------------------------------------------------------------
-
 dat_mplus <- dat_mplus |>
-  dplyr::mutate(
-    sic_original = trimws(
-      as.character(SIC_N)
+  left_join(
+    id_dictionary,
+    by = "SIC_N"
+  ) |>
+  mutate(
+    stat_t5 = case_when(
+      stat_t5 == "drop out"  ~ 0,
+      stat_t5 == "completed" ~ 2,
+      !is.na(stat_t5)        ~ 1,
+      TRUE                   ~ NA_real_
     )
   ) |>
-  dplyr::select(
+  select(
     -SIC_N
   ) |>
-  dplyr::left_join(
-    id_dictionary,
-    by = c(
-      "sic_original" = "sic"
-    )
+  rename(
+    SIC_N = SIC_num
   ) |>
-  dplyr::mutate(
-    stat_t5 = dplyr::case_when(
-      stringr::str_to_lower(
-        stringr::str_squish(
-          as.character(stat_t5)
-        )
-      ) == "drop out" ~ 0,
-
-      stringr::str_to_lower(
-        stringr::str_squish(
-          as.character(stat_t5)
-        )
-      ) == "completed" ~ 2,
-
-      !is.na(stat_t5) &
-        nzchar(
-          stringr::str_squish(
-            as.character(stat_t5)
-          )
-        ) ~ 1,
-
-      TRUE ~ NA_real_
-    )
-  ) |>
-  dplyr::select(
-    -sic_original
-  ) |>
-  dplyr::select(
-    dplyr::where(
+  select(
+    where(
       ~ is.numeric(.x) &&
         !inherits(.x, "POSIXt") &&
         !inherits(.x, "Date")
     )
   )
 
-
-#-------------------------------------------------------------------------
-##### UPDATE VARIABLE DICTIONARY #####
-#-------------------------------------------------------------------------
-
+##### UPDATE VARIABLE DICTIONARY ####
 variable_dictionary <- variable_dictionary |>
-  dplyr::mutate(
-    retained =
-      mplus_name %in% names(dat_mplus),
-
-    final_position =
-      match(
+  mutate(
+    retained = mplus_name %in% names(dat_mplus),
+    final_position = match(mplus_name, names(dat_mplus)),
+    final_class = if_else(
+      retained,
+      vapply(
         mplus_name,
-        names(dat_mplus)
+        function(x) class(dat_mplus[[x]])[1],
+        character(1)
       ),
-
-    final_class = purrr::map_chr(
-      mplus_name,
-      function(variable_name) {
-        if (variable_name %in% names(dat_mplus)) {
-          class(dat_mplus[[variable_name]])[1]
-        } else {
-          NA_character_
-        }
-      }
+      NA_character_
     )
   ) |>
-  dplyr::arrange(
-    dplyr::desc(retained),
+  arrange(
+    desc(retained),
     final_position,
     original_position
   )
 
-
-#-------------------------------------------------------------------------
-##### CHECK FINAL MPLUS DATASET AND MAPPING #####
-#-------------------------------------------------------------------------
-
-retained_dictionary <- variable_dictionary |>
-  dplyr::filter(
-    retained
-  )
-
+##### CHECK FINAL MPLUS DATASET ####
 stopifnot(
-  nrow(dat_mplus) == nrow(dat_raw),
   all(vapply(dat_mplus, is.numeric, logical(1))),
   !any(vapply(dat_mplus, inherits, logical(1), what = "POSIXt")),
   !any(vapply(dat_mplus, inherits, logical(1), what = "Date")),
   all(nchar(names(dat_mplus)) <= 8),
-  all(
-    grepl(
-      "^[A-Za-z][A-Za-z0-9_]*$",
-      names(dat_mplus)
-    )
-  ),
   anyDuplicated(names(dat_mplus)) == 0,
-  anyDuplicated(tolower(names(dat_mplus))) == 0,
   "SIC_N" %in% names(dat_mplus),
-  "stat_t5" %in% names(dat_mplus),
-  !anyNA(dat_mplus$SIC_N),
-  anyDuplicated(dat_mplus$SIC_N) == 0,
-  all(
-    stats::na.omit(dat_mplus$stat_t5) %in%
-      0:2
-  ),
-  identical(
-    retained_dictionary$mplus_name,
-    names(dat_mplus)[
-      retained_dictionary$final_position
-    ]
-  )
+  "stat_t5" %in% names(dat_mplus)
 )
 
+##### INSPECT REMOVED VARIABLES ####
 removed_variables <- variable_dictionary |>
-  dplyr::filter(
-    !retained
-  )
+  filter(!retained)
 
+# View(variable_dictionary)
+# View(removed_variables)
 
-#-------------------------------------------------------------------------
-##### SAVE DICTIONARY, LOOKUP AND R DATASET #####
-#-------------------------------------------------------------------------
-
-readr::write_csv(
+##### SAVE VARIABLE DICTIONARY ####
+write_csv(
   variable_dictionary,
-  mplus_variable_dictionary_file
+  "C:/Users/keil/Documents/main_outcome_amis2/mplus_variable_dictionary.csv"
 )
 
-saveRDS(
-  dat_mplus,
-  mplus_dataset_rds_file
-)
-
-stopifnot(
-  file.exists(mplus_variable_dictionary_file),
-  file.exists(mplus_dataset_rds_file),
-  file.exists(sic_n_lookup_file)
-)
-
-
-#-------------------------------------------------------------------------
-##### PREPARE MPLUS EXPORT #####
-#-------------------------------------------------------------------------
-
+##### REPLACE MISSING VALUES FOR MPLUS EXPORT ####
 dat_mplus_export <- dat_mplus |>
-  dplyr::mutate(
-    dplyr::across(
-      dplyr::everything(),
+  mutate(
+    across(
+      everything(),
       ~ replace(.x, is.na(.x), -999)
     )
   )
@@ -806,153 +682,135 @@ stopifnot(
   sum(is.na(dat_mplus_export)) == 0
 )
 
-mplus_names <- names(dat_mplus)
+##### DEFINE OUTPUT DIRECTORIES ####
 
-seadrive_mplus_names_text_file <- file.path(
-  seadrive_mplus_data_dir,
-  "AMIS_mplus_names.txt"
+output_dir <- paste0(
+  "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/",
+  "MAIN OUTCOME/02_data/02_data_Prep/MPlus_Dataset"
 )
 
-mplus_names_text_file_local <- file.path(
-  mplus_input_dir,
-  "AMIS_mplus_names.txt"
+mplus_input_dir <- "C:/MPLUS/Inputs"
+
+invisible(
+  sapply(
+    c(
+      output_dir,
+      mplus_input_dir
+    ),
+    dir.create,
+    recursive = TRUE,
+    showWarnings = FALSE
+  )
 )
 
+##### SAVE MPLUS DATASET ####
 
-#-------------------------------------------------------------------------
-##### SAVE MPLUS FILES TO SEADRIVE #####
-#-------------------------------------------------------------------------
+mplus_data_file <- file.path(
+  output_dir,
+  "AMIS_mplus_dataset.dat"
+)
 
 write.table(
   dat_mplus_export,
-  file = seadrive_mplus_data_file,
+  file = mplus_data_file,
   sep = "\t",
   row.names = FALSE,
   col.names = FALSE,
   quote = FALSE
 )
 
+##### SAVE MPLUS VARIABLE NAMES ####
+
+mplus_names <- names(dat_mplus)
+
+mplus_names_file <- file.path(
+  output_dir,
+  "AMIS_mplus_names.rds"
+)
+
 saveRDS(
   mplus_names,
-  seadrive_mplus_names_file
+  file = mplus_names_file
+)
+
+##### SAVE MPLUS NAMES SYNTAX ####
+
+mplus_names_text <- paste(
+  mplus_names,
+  collapse = "\n    "
+)
+
+mplus_names_syntax_file <- file.path(
+  output_dir,
+  "AMIS_mplus_names.txt"
 )
 
 writeLines(
   c(
     "NAMES ARE",
-    wrap_mplus_names(
-      mplus_names,
-      max_width = 88
+    paste0(
+      "    ",
+      mplus_names_text
     ),
     ";"
   ),
-  seadrive_mplus_names_text_file
+  mplus_names_syntax_file
 )
 
+##### COPY MPLUS FILES TO LOCAL INPUT DIRECTORY ####
 
-#-------------------------------------------------------------------------
-##### COPY MPLUS FILES TO LOCAL INPUT DIRECTORY #####
-#-------------------------------------------------------------------------
-
-copy_file_checked(
-  source_file = seadrive_mplus_data_file,
-  target = mplus_data_file
+files_to_copy <- c(
+  mplus_data_file,
+  mplus_names_file,
+  mplus_names_syntax_file
 )
 
-copy_file_checked(
-  source_file = seadrive_mplus_names_file,
-  target = mplus_names_file_local
+copy_success <- file.copy(
+  from = files_to_copy,
+  to = mplus_input_dir,
+  overwrite = TRUE
 )
-
-copy_file_checked(
-  source_file = seadrive_mplus_names_text_file,
-  target = mplus_names_text_file_local
-)
-
-
-#-------------------------------------------------------------------------
-##### FINAL FILE AND COLUMN CHECKS #####
-#-------------------------------------------------------------------------
-
-count_data_columns <- function(
-    data_file
-) {
-
-  first_line <- readLines(
-    data_file,
-    n = 1,
-    warn = FALSE
-  )
-
-  if (
-    length(first_line) != 1 ||
-    !nzchar(first_line)
-  ) {
-    stop(
-      "Could not read first data line from:\n",
-      data_file
-    )
-  }
-
-  length(
-    strsplit(
-      first_line,
-      split = "\t",
-      fixed = TRUE
-    )[[1]]
-  )
-}
 
 stopifnot(
-  file.exists(seadrive_mplus_data_file),
-  file.exists(seadrive_mplus_names_file),
-  file.exists(seadrive_mplus_names_text_file),
-  file.exists(mplus_data_file),
-  file.exists(mplus_names_file_local),
-  file.exists(mplus_names_text_file_local),
-  identical(
-    readRDS(seadrive_mplus_names_file),
-    mplus_names
-  ),
-  identical(
-    readRDS(mplus_names_file_local),
-    mplus_names
-  ),
-  count_data_columns(seadrive_mplus_data_file) ==
-    length(mplus_names),
-  count_data_columns(mplus_data_file) ==
-    length(mplus_names),
-  identical(
-    unname(
-      tools::md5sum(seadrive_mplus_data_file)
+  all(copy_success)
+)
+
+##### CHECK LOCAL MPLUS FILES ####
+
+local_mplus_data_file <- file.path(
+  mplus_input_dir,
+  "AMIS_mplus_dataset.dat"
+)
+
+local_mplus_names_file <- file.path(
+  mplus_input_dir,
+  "AMIS_mplus_names.rds"
+)
+
+local_mplus_names_syntax_file <- file.path(
+  mplus_input_dir,
+  "AMIS_mplus_names.txt"
+)
+
+stopifnot(
+  file.exists(local_mplus_data_file),
+  file.exists(local_mplus_names_file),
+  file.exists(local_mplus_names_syntax_file)
+)
+
+##### CHECK DATASET AND VARIABLE NAMES ####
+
+number_of_data_columns <- length(
+  strsplit(
+    readLines(
+      local_mplus_data_file,
+      n = 1
     ),
-    unname(
-      tools::md5sum(mplus_data_file)
-    )
-  )
+    split = "\t",
+    fixed = TRUE
+  )[[1]]
 )
 
-cat(
-  "\nBase Mplus dataset prepared successfully.",
-  "\nRows: ", nrow(dat_mplus),
-  "\nColumns: ", ncol(dat_mplus),
-  "\nRemoved nonnumeric variables: ", nrow(removed_variables),
-  "\n",
-  "\nVariable dictionary:",
-  "\n", mplus_variable_dictionary_file,
-  "\n",
-  "\nSIC_N lookup:",
-  "\n", sic_n_lookup_file,
-  "\n",
-  "\nR dataset:",
-  "\n", mplus_dataset_rds_file,
-  "\n",
-  "\nSeaDrive Mplus dataset:",
-  "\n", seadrive_mplus_data_file,
-  "\n",
-  "\nLocal Mplus dataset:",
-  "\n", mplus_data_file,
-  "\n",
-  sep = ""
+stopifnot(
+  number_of_data_columns == length(mplus_names)
 )
-

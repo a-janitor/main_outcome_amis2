@@ -1,3 +1,7 @@
+#-------------------------------------------------------------------------
+##### SETUP #####
+#-------------------------------------------------------------------------
+##### LOAD PACKAGES ####
 install.packages(
   c("officer", "flextable"),
   dependencies = TRUE,
@@ -161,6 +165,9 @@ max(
   )
 )
 
+#-------------------------------------------------------------------------
+##### MODEL SPECIFICATIONS #####
+#-------------------------------------------------------------------------
 ##### CREATE M1_CONFIGURAL MODEL ####
 configural_input <- paste0(
   "TITLE:
@@ -1758,13 +1765,10 @@ file.copy(
   overwrite = TRUE
 )
 
+#-------------------------------------------------------------
 
-
-
-###############################################################
 ##### WRITE TABLE WITH RESULTS OF MEASUREMENT INVARIANCE ####
-###############################################################
-
+#-------------------------------------------------------------
 ##### DEFINE MPLUS OUTPUT DIRECTORY ####
 mplus_output_dir <- "C:/MPLUS/Inputs"
 
@@ -2342,12 +2346,9 @@ print(
     "Table_S1_SDQ_measurement_invariance_APA.docx"
   )
 )
-
-
-###############################################################
+#-------------------------------------------------------------
 ##### WRITE TABLE WITH RESULTS OF LATENT CHANGE MODEL ########
-###############################################################
-
+#-------------------------------------------------------------
 ##### DEFINE LCS OUTPUT FILE ####
 lcs_output_file <- file.path(
   mplus_input_dir,
@@ -3093,3 +3094,221 @@ print(
     "Table_S2_SDQ_classical_lcs_APA.docx"
   )
 )
+
+
+#-------------------------------------------------------------------------
+##### SYNCHRONIZE AND ARCHIVE COMPLETED MPLUS MODELS #########
+#-------------------------------------------------------------------------
+##### DEFINE MODEL ROUTING ####
+model_routing <- list(
+  measurement = list(
+    files = c(
+      "02_sdq_residuals_free",
+      "04_sdq_within_informant_crossscale",
+      "05_sdq_between_informant_residuals"
+    ),
+    github_dir = github_measurement_dir,
+    results_dir = mplus_results_dir_measurement
+  ),
+  
+  invariance = list(
+    files = c(
+      "01_sdq_configural",
+      "03_sdq_metric_invariance",
+      "06_sdq_full_scalar_invariance",
+      "07_sdq_partial_scalar_invariance"
+    ),
+    github_dir = github_invariance_dir,
+    results_dir = mplus_results_dir_invariance
+  ),
+  
+  lcs = list(
+    files = c(
+      "08_sdq_classical_lcs"
+    ),
+    github_dir = github_lcs_dir,
+    results_dir = mplus_results_dir_lcs
+  )
+)
+
+##### DEFINE ARCHIVE ####
+archive_root <- file.path(
+  mplus_input_dir,
+  "archive"
+)
+
+archive_stamp <- format(
+  Sys.time(),
+  "%Y-%m-%d_%H%M"
+)
+
+dir.create(
+  archive_root,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+##### DEFINE CHECKED COPY FUNCTION ####
+copy_files_checked <- function(
+    files,
+    target_dir
+) {
+  
+  if (length(files) == 0) {
+    return(invisible(TRUE))
+  }
+  
+  dir.create(
+    target_dir,
+    recursive = TRUE,
+    showWarnings = FALSE
+  )
+  
+  copy_success <- file.copy(
+    from = files,
+    to = file.path(
+      target_dir,
+      basename(files)
+    ),
+    overwrite = TRUE
+  )
+  
+  if (!all(copy_success)) {
+    stop(
+      paste0(
+        "Could not copy all files to: ",
+        target_dir
+      )
+    )
+  }
+  
+  invisible(TRUE)
+}
+
+##### PROCESS MODEL GROUPS ####
+for (group_name in names(model_routing)) {
+  
+  group <- model_routing[[group_name]]
+  
+  input_files <- file.path(
+    mplus_input_dir,
+    paste0(
+      group$files,
+      ".inp"
+    )
+  )
+  
+  output_files <- file.path(
+    mplus_input_dir,
+    paste0(
+      group$files,
+      ".out"
+    )
+  )
+  
+  gh5_files <- file.path(
+    mplus_input_dir,
+    paste0(
+      group$files,
+      ".gh5"
+    )
+  )
+  
+  ##### CHECK REQUIRED FILES ####
+  required_files <- c(
+    input_files,
+    output_files
+  )
+  
+  missing_files <- required_files[
+    !file.exists(required_files)
+  ]
+  
+  if (length(missing_files) > 0) {
+    
+    print(
+      missing_files
+    )
+    
+    stop(
+      paste0(
+        "Required files are missing for group: ",
+        group_name
+      )
+    )
+  }
+  
+  ##### RETAIN EXISTING OPTIONAL GH5 FILES ####
+  gh5_files <- gh5_files[
+    file.exists(gh5_files)
+  ]
+  
+  result_files <- c(
+    output_files,
+    gh5_files
+  )
+  
+  all_model_files <- c(
+    input_files,
+    result_files
+  )
+  
+  ##### COPY INPUTS TO GITHUB ####
+  copy_files_checked(
+    files = input_files,
+    target_dir = group$github_dir
+  )
+  
+  ##### COPY OUTPUTS TO SEAGATE RESULTS ####
+  copy_files_checked(
+    files = result_files,
+    target_dir = group$results_dir
+  )
+  
+  ##### CREATE DATED GROUP ARCHIVE ####
+  group_archive_dir <- file.path(
+    archive_root,
+    paste0(
+      archive_stamp,
+      "_",
+      group_name
+    )
+  )
+  
+  ##### COPY ALL MODEL FILES TO ARCHIVE ####
+  copy_files_checked(
+    files = all_model_files,
+    target_dir = group_archive_dir
+  )
+  
+  ##### REMOVE ARCHIVED FILES FROM WORKING DIRECTORY ####
+  removal_success <- file.remove(
+    all_model_files
+  )
+  
+  if (!all(removal_success)) {
+    stop(
+      paste0(
+        "Could not remove all archived files for group: ",
+        group_name
+      )
+    )
+  }
+}
+
+##### SHOW REMAINING WORKING FILES ####
+message(
+  "\nSynchronization and archiving completed."
+)
+
+list.files(
+  mplus_input_dir
+)
+
+##### SHOW CREATED ARCHIVE DIRECTORIES ####
+list.dirs(
+  archive_root,
+  recursive = FALSE,
+  full.names = FALSE
+)
+#-------------------------------------------------------------------------

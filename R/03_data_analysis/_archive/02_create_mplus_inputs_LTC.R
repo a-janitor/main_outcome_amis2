@@ -2,37 +2,130 @@
 ##### SETUP #####
 #-------------------------------------------------------------------------
 
-source("C:/Users/keil/Documents/main_outcome_amis2/R/03_data_analysis/00_setup.R")
+##### LOAD PACKAGES ####
 
-check_packages(
-  c(
-    "MplusAutomation",
-    "officer",
-    "flextable"
-  ),
-  required = TRUE
+library(MplusAutomation)
+library(dplyr)
+library(purrr)
+library(stringr)
+library(readr)
+library(flextable)
+library(officer)
+library(readxl)
+library(writexl)
+
+##### DEFINE MPLUS DIRECTORIES ####
+
+mplus_input_dir <- "C:/MPLUS/Inputs"
+
+mplus_results_dir_measurement <- paste0(
+  "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/",
+  "MAIN OUTCOME/03_results/Mplus/01_measurement"
+)
+
+mplus_results_dir_invariance <- paste0(
+  "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/",
+  "MAIN OUTCOME/03_results/Mplus/02_invariance"
+)
+
+mplus_results_dir_lcs <- paste0(
+  "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/",
+  "MAIN OUTCOME/03_results/Mplus/03_lcs"
+)
+
+mplus_results_dir_mal <- paste0(
+  "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/",
+  "MAIN OUTCOME/03_results/Mplus/04_maltreatment"
+)
+
+mplus_results_dir_bio <- paste0(
+  "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/",
+  "MAIN OUTCOME/03_results/Mplus/05_biology"
+)
+
+##### DEFINE GITHUB MPLUS DIRECTORIES ####
+
+github_mplus_dir <- file.path(
+  "C:/Users/keil/Documents/main_outcome_amis2",
+  "Mplus"
+)
+
+github_measurement_dir <- file.path(
+  github_mplus_dir,
+  "01_measurement"
+)
+
+github_invariance_dir <- file.path(
+  github_mplus_dir,
+  "02_invariance"
+)
+
+github_lcs_dir <- file.path(
+  github_mplus_dir,
+  "03_lcs"
+)
+
+github_maltreatment_dir <- file.path(
+  github_mplus_dir,
+  "04_maltreatment"
+)
+
+github_biology_dir <- file.path(
+  github_mplus_dir,
+  "05_biology"
+)
+##### DEFINE SEAGATE DATA FOLDER ######
+seadrive_mplus_data_dir <- paste0(
+  "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/",
+  "MAIN OUTCOME/02_data/02_data_Prep/MPlus_Dataset"
+)
+
+##### CREATE DIRECTORIES ####
+
+directories <- c(
+  mplus_input_dir,
+  mplus_results_dir_measurement,
+  mplus_results_dir_invariance,
+  mplus_results_dir_lcs,
+  mplus_results_dir_mal,
+  mplus_results_dir_bio,
+  github_measurement_dir,
+  github_invariance_dir,
+  github_lcs_dir,
+  github_maltreatment_dir,
+  github_biology_dir
+)
+
+invisible(
+  sapply(
+    directories,
+    dir.create,
+    recursive = TRUE,
+    showWarnings = FALSE
+  )
 )
 
 #-------------------------------------------------------------------------
 ##### LOAD AND CHECK MPLUS DATASET #####
 #-------------------------------------------------------------------------
 
-##### DEFINE AND CHECK MPLUS DATASET ####
+##### DEFINE MPLUS DATASET ####
 
-mplus_data_name <- basename(
-  mplus_data_file
+mplus_data_name <- "AMIS_mplus_dataset.dat"
+
+mplus_data_file <- file.path(
+  mplus_input_dir,
+  mplus_data_name
 )
 
-mplus_names_file <- mplus_names_file_local
-
-assert_file_exists(
-  mplus_data_file,
-  "Local Mplus dataset"
+mplus_names_file <- file.path(
+  mplus_input_dir,
+  "AMIS_mplus_names.rds"
 )
 
-assert_file_exists(
-  mplus_names_file,
-  "Local Mplus names file"
+stopifnot(
+  file.exists(mplus_data_file),
+  file.exists(mplus_names_file)
 )
 
 ##### LOAD MPLUS VARIABLE NAMES ####
@@ -81,6 +174,58 @@ stopifnot(
 #-------------------------------------------------------------------------
 ##### CREATE MPLUS NAMES SYNTAX #####
 #-------------------------------------------------------------------------
+
+##### WRAP MPLUS VARIABLE NAMES ####
+
+wrap_mplus_names <- function(
+    variable_names,
+    max_width = 88,
+    indent = "    "
+) {
+  
+  output_lines <- character()
+  current_line <- indent
+  
+  for (variable_name in variable_names) {
+    
+    if (identical(current_line, indent)) {
+      
+      proposed_line <- paste0(
+        indent,
+        variable_name
+      )
+      
+    } else {
+      
+      proposed_line <- paste(
+        current_line,
+        variable_name
+      )
+    }
+    
+    if (nchar(proposed_line) > max_width) {
+      
+      output_lines <- c(
+        output_lines,
+        current_line
+      )
+      
+      current_line <- paste0(
+        indent,
+        variable_name
+      )
+      
+    } else {
+      
+      current_line <- proposed_line
+    }
+  }
+  
+  c(
+    output_lines,
+    current_line
+  )
+}
 
 ##### CREATE MPLUS NAMES LIST ####
 
@@ -249,7 +394,10 @@ if (!names_identical_to_m8) {
 
 ##### LOAD VARIABLE DICTIONARY ####
 
-variable_dictionary_file <- mplus_variable_dictionary_file
+variable_dictionary_file <- file.path(
+  "C:/Users/keil/Documents/main_outcome_amis2",
+  "mplus_variable_dictionary.csv"
+)
 
 stopifnot(
   file.exists(variable_dictionary_file)
@@ -1295,107 +1443,6 @@ cat(
 )
 
 #-------------------------------------------------------------------------
-##### RUN MPLUS MODELS M9 TO M16 #####
-#-------------------------------------------------------------------------
-
-##### SWITCH FOR AUTOMATIC MPLUS EXECUTION #####
-
-run_m9_to_m16 <- TRUE
-
-
-##### COLLECT CREATED INPUT FILES #####
-
-mplus_input_files_m9_to_m16 <- c(
-  input_file_m9,
-  input_file_m10,
-  input_file_m11,
-  input_file_m12,
-  input_file_m13,
-  input_file_m14,
-  input_file_m15,
-  input_file_m16
-)
-
-
-##### CHECK INPUT FILES #####
-
-missing_input_files <- mplus_input_files_m9_to_m16[
-  !file.exists(mplus_input_files_m9_to_m16)
-]
-
-if (length(missing_input_files) > 0) {
-  stop(
-    "The following Mplus input files are missing:\n",
-    paste(
-      missing_input_files,
-      collapse = "\n"
-    )
-  )
-}
-
-
-##### CHECK MPLUS DATA FILE #####
-
-assert_file_exists(
-  mplus_data_file,
-  "Local Mplus dataset"
-)
-
-
-##### CHECK WHETHER MPLUS IS AVAILABLE #####
-
-if (
-  MplusAutomation::mplusAvailable(
-    silent = FALSE
-  ) != 0
-) {
-  stop(
-    "Mplus could not be detected by MplusAutomation."
-  )
-}
-
-
-##### DISPLAY SELECTED MODELS #####
-
-cat(
-  "\nThe following Mplus models will be run:\n",
-  paste(
-    basename(mplus_input_files_m9_to_m16),
-    collapse = "\n"
-  ),
-  "\n\n",
-  sep = ""
-)
-
-
-##### RUN M9 TO M16 #####
-
-if (run_m9_to_m16) {
-  
-  MplusAutomation::runModels(
-    target = mplus_input_files_m9_to_m16,
-    
-    # Rerun all models and overwrite existing output files
-    replaceOutfile = "always",
-    
-    # Do not print the complete Mplus output in the R console
-    showOutput = FALSE,
-    
-    # Save run information
-    logFile = file.path(
-      mplus_input_dir,
-      "M9_to_M16_run.log"
-    ),
-    
-    # Display progress in the R console
-    quiet = FALSE,
-    
-    # Terminate remaining Mplus processes if a run fails
-    killOnFail = TRUE
-  )
-}
-
-#-------------------------------------------------------------------------
 ##### CREATE M17: TWO-CLASS QUADRATIC BURDEN MODEL #####
 #-------------------------------------------------------------------------
 
@@ -1744,7 +1791,7 @@ input_syntax <- paste0(
   "  SAVE = CPROBABILITIES;\n"
 )
 
-##### SAVE M18 INPUT ####
+##### SAVE M18 EXPORT INPUT ####
 
 input_file <- file.path(
   mplus_input_dir,
@@ -1792,7 +1839,7 @@ stopifnot(
   )
 )
 
-##### COPY M18 INPUT TO GITHUB ####
+##### COPY M18 EXPORT INPUT TO GITHUB ####
 
 copy_success <- file.copy(
   from = input_file,
@@ -2083,8 +2130,6 @@ writeLines(
   con = input_file
 )
 
-input_file_m18a <- input_file
-
 ##### COPY INPUT TO GITHUB ####
 
 copy_success <- file.copy(
@@ -2104,137 +2149,6 @@ cat(
   "\n",
   sep = ""
 )
-#-------------------------------------------------------------------------
-##### RUN MPLUS MODELS M17, M18, M19, AND M18A #####
-#-------------------------------------------------------------------------
-
-##### SELECT MODELS TO RUN #####
-
-run_m17  <- TRUE
-run_m18  <- TRUE
-run_m19  <- TRUE
-run_m18a <- TRUE
-
-
-##### COLLECT SELECTED INPUT FILES #####
-
-mplus_input_files_m17_to_m18a <- c(
-  if (run_m17)  input_file_m17,
-  if (run_m18)  input_file_m18,
-  if (run_m19)  input_file_m19,
-  if (run_m18a) input_file_m18a
-)
-
-
-##### CHECK THAT AT LEAST ONE MODEL WAS SELECTED #####
-
-if (length(mplus_input_files_m17_to_m18a) == 0) {
-  stop(
-    "No Mplus models were selected for execution."
-  )
-}
-
-
-##### CHECK INPUT FILES #####
-
-missing_input_files <- mplus_input_files_m17_to_m18a[
-  !file.exists(mplus_input_files_m17_to_m18a)
-]
-
-if (length(missing_input_files) > 0) {
-  stop(
-    "The following Mplus input files are missing:\n",
-    paste(
-      missing_input_files,
-      collapse = "\n"
-    )
-  )
-}
-
-
-##### CHECK MPLUS DATA FILE #####
-
-assert_file_exists(
-  mplus_data_file,
-  "Local Mplus dataset"
-)
-
-
-##### CHECK WHETHER MPLUS IS AVAILABLE #####
-
-if (
-  MplusAutomation::mplusAvailable(
-    silent = FALSE
-  ) != 0
-) {
-  stop(
-    "Mplus could not be detected by MplusAutomation."
-  )
-}
-
-
-##### REMOVE OLD M18 CPROB FILE #####
-
-# This prevents an old class-probability file from being
-# mistaken for a newly generated file.
-
-if (
-  run_m18 &&
-  file.exists(m18_cprob_file)
-) {
-  unlink(
-    m18_cprob_file
-  )
-}
-
-if (
-  run_m18 &&
-  file.exists(m18_cprob_file)
-) {
-  stop(
-    "The old M18 class-probability file could not be removed:\n",
-    m18_cprob_file
-  )
-}
-
-
-##### DISPLAY SELECTED MODELS #####
-
-cat(
-  "\nThe following Mplus models will be run:\n",
-  paste(
-    basename(mplus_input_files_m17_to_m18a),
-    collapse = "\n"
-  ),
-  "\n\n",
-  sep = ""
-)
-
-
-##### RUN SELECTED MODELS #####
-
-MplusAutomation::runModels(
-  target = mplus_input_files_m17_to_m18a,
-  
-  # Rerun models and overwrite existing output files
-  replaceOutfile = "always",
-  
-  # Do not print the complete Mplus output
-  showOutput = FALSE,
-  
-  # Save run information
-  logFile = file.path(
-    mplus_input_dir,
-    "M17_M18_M19_M18a_run.log"
-  ),
-  
-  # Display progress
-  quiet = FALSE,
-  
-  # Stop remaining processes if a model fails
-  killOnFail = TRUE
-)
-
 #-------------------------------------------------------------------------
 ##### EXTRACT M18 CLASS ASSIGNMENTS #####
 #-------------------------------------------------------------------------
@@ -2551,13 +2465,27 @@ stopifnot(
 
 ##### DEFINE OUTPUT FILES ####
 
-mplus_data_name_m18 <- basename(
-  mplus_data_file_m18
+mplus_data_name_m18 <- "AMIS_mplus_dataset_m18.dat"
+
+mplus_data_file_m18 <- file.path(
+  mplus_input_dir,
+  mplus_data_name_m18
 )
 
-mplus_names_file_m18 <- mplus_names_file_m18_local
-mplus_names_text_file_m18 <- mplus_names_text_file_m18_local
-mplus_rds_file_m18 <- mplus_rds_file_m18_local
+mplus_names_file_m18 <- file.path(
+  mplus_input_dir,
+  "AMIS_mplus_names_m18.rds"
+)
+
+mplus_names_text_file_m18 <- file.path(
+  mplus_input_dir,
+  "AMIS_mplus_names_m18.txt"
+)
+
+mplus_rds_file_m18 <- file.path(
+  mplus_input_dir,
+  "AMIS_mplus_dataset_m18.rds"
+)
 
 ##### SAVE MPLUS DATA FILE ####
 
@@ -2679,7 +2607,7 @@ file.copy(
 ##### MERGE M18 CLASSES WITH ORIGINAL EXCEL DATASET ####
 
 dat_original <- read_excel(
-  master_excel_file
+  "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/MAIN OUTCOME/02_data/02_data_Prep/AMIS_merged_analysis_dataset.xlsx"
 )
 
 ##### RECREATE ID LOOKUP ####
@@ -2824,7 +2752,21 @@ stopifnot(
 
 ##### SAVE NEW EXCEL DATASET ####
 
-excel_file_m18 <- m18_excel_file
+excel_output_dir <- paste0(
+  "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/",
+  "MAIN OUTCOME/02_data/02_data_Prep"
+)
+
+dir.create(
+  excel_output_dir,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+excel_file_m18 <- file.path(
+  excel_output_dir,
+  "AMIS_merged_analysis_dataset_with_M18_classes.xlsx"
+)
 
 writexl::write_xlsx(
   x = dat_original_m18,
@@ -2847,6 +2789,10 @@ cat(
 #-------------------------------------------------------------------------
 ##### PLOT M18 THREE-CLASS BURDEN TRAJECTORIES #####
 #-------------------------------------------------------------------------
+##### LOAD GGPLOT2 ####
+
+library(ggplot2)
+
 ##### DEFINE M18 CLASS-SPECIFIC GROWTH MEANS ####
 
 m18_growth_means <- tibble(
@@ -4247,7 +4193,7 @@ cat(
 mplus_transfer_source_dir <- mplus_input_dir
 
 mplus_archive_dir <- file.path(
-  mplus_archive_root,
+  "C:/MPLUS/Archive",
   "04_maltreatment",
   format(
     Sys.Date(),
@@ -4418,4 +4364,3 @@ cat(
   "\n",
   sep = ""
 )
-

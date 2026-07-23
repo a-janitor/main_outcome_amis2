@@ -1,61 +1,170 @@
 #-------------------------------------------------------------------------
 ##### SETUP #####
 #-------------------------------------------------------------------------
+##### CALL PACKAGES #####
+install.packages(
+  c("officer", "flextable"),
+  dependencies = TRUE,
+  type = "binary"
+)
+library(MplusAutomation)
+library(dplyr)
+library(purrr)
+library(stringr)
+library(readr)
+library(flextable)
+library(officer)
 
-source("C:/Users/keil/Documents/main_outcome_amis2/R/03_data_analysis/00_setup.R")
+##### DEFINE MPLUS DIRECTORIES ####
+mplus_input_dir <- "C:/MPLUS/Inputs"
 
-check_packages(
-  c(
-    "MplusAutomation",
-    "officer",
-    "flextable"
+mplus_results_dir_measurement <- paste0(
+  "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/",
+  "MAIN OUTCOME/03_results/Mplus/01_measurement"
+)
+
+mplus_results_dir_invariance <- paste0(
+  "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/",
+  "MAIN OUTCOME/03_results/Mplus/02_invariance"
+)
+
+mplus_results_dir_lcs <- paste0(
+  "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/",
+  "MAIN OUTCOME/03_results/Mplus/03_lcs"
+)
+
+mplus_results_dir_mal <- paste0(
+  "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/",
+  "MAIN OUTCOME/03_results/Mplus/04_maltreatment"
+)
+
+mplus_results_dir_bio <- paste0(
+  "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/",
+  "MAIN OUTCOME/03_results/Mplus/05_biology"
+)
+
+##### DEFINE GITHUB MPLUS DIRECTORIES ####
+github_mplus_dir <- file.path(
+  "C:/Users/keil/Documents/main_outcome_amis2",
+  "Mplus"
+)
+
+github_measurement_dir <- file.path(
+  github_mplus_dir,
+  "01_measurement"
+)
+
+github_invariance_dir <- file.path(
+  github_mplus_dir,
+  "02_invariance"
+)
+
+github_lcs_dir <- file.path(
+  github_mplus_dir,
+  "03_lcs"
+)
+
+github_maltreatment_dir <- file.path(
+  github_mplus_dir,
+  "04_maltreatment"
+)
+
+github_maltreatment_dir <- file.path(
+  github_mplus_dir,
+  "05_biology"
+)
+
+
+invisible(
+  sapply(
+    c(
+      mplus_input_dir,
+      mplus_results_dir_measurement,
+      mplus_results_dir_invariance,
+      mplus_results_dir_lcs,
+      mplus_results_dir_mal,
+      mplus_results_dir_bio
+    ),
+    dir.create,
+    recursive = TRUE,
+    showWarnings = FALSE
+  )
+)
+
+##### COPY MPLUS DATASET TO INPUT DIRECTORY ####
+file.copy(
+  from = paste0(
+    "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/",
+    "MAIN OUTCOME/02_data/02_data_Prep/MPlus_Dataset/",
+    "AMIS_mplus_dataset.dat"
   ),
-  required = TRUE
+  to = file.path(
+    mplus_input_dir,
+    "AMIS_mplus_dataset.dat"
+  ),
+  overwrite = TRUE
 )
 
-##### COPY AND LOAD MPLUS DATA INFORMATION #####
+##### WRAP MPLUS VARIABLE NAMES ####
+wrap_mplus_names <- function(
+    variable_names,
+    max_width = 88,
+    indent = "    "
+) {
+  
+  output_lines <- character()
+  current_line <- indent
+  
+  for (variable_name in variable_names) {
+    
+    proposed_line <- paste(
+      current_line,
+      variable_name
+    )
+    
+    if (nchar(proposed_line) > max_width) {
+      
+      output_lines <- c(
+        output_lines,
+        current_line
+      )
+      
+      current_line <- paste0(
+        indent,
+        variable_name
+      )
+      
+    } else {
+      
+      current_line <- proposed_line
+    }
+  }
+  
+  c(
+    output_lines,
+    current_line
+  )
+}
 
-copy_to_mplus(
-  seadrive_mplus_data_file
-)
-
-copy_to_mplus(
-  seadrive_mplus_names_file
-)
-
-mplus_names <- readRDS(
-  mplus_names_file_local
-)
-
-stopifnot(
-  is.character(mplus_names),
-  length(mplus_names) > 0,
-  !anyNA(mplus_names),
-  anyDuplicated(mplus_names) == 0
-)
-
+##### CREATE MPLUS NAMES LIST ####
 names_syntax <- paste(
   wrap_mplus_names(
-    mplus_names,
+    names(dat_mplus),
     max_width = 88
   ),
   collapse = "\n"
 )
 
-stopifnot(
-  max(
-    nchar(
-      strsplit(
-        names_syntax,
-        "\n"
-      )[[1]]
-    )
-  ) <= 88
+##### CHECK MAXIMUM LINE LENGTH ####
+max(
+  nchar(
+    strsplit(
+      names_syntax,
+      "\n"
+    )[[1]]
+  )
 )
 
-#-------------------------------------------------------------------------
-##### MODEL SPECIFICATIONS #####
-#-------------------------------------------------------------------------
 ##### CREATE M1_CONFIGURAL MODEL ####
 configural_input <- paste0(
   "TITLE:
@@ -136,23 +245,21 @@ OUTPUT:
 )
 
 ##### SAVE MPLUS INPUT ####
-input_file <- file.path(
-  mplus_input_dir,
-  "01_sdq_configural.inp"
-)
-
 writeLines(
   configural_input,
-  con = input_file
+  con = file.path(
+    mplus_input_dir,
+    "01_sdq_configural.inp"
+  )
 )
 
 ##### COPY INPUT TO GITHUB PROJECT ####
-copy_file_checked(
-  source_file = input_file,
-  target = file.path(
-    github_invariance_dir,
-    basename(input_file)
-  )
+file.copy(
+  from = input_file,
+  to = paste0(
+    "C:/Users/keil/Documents/main_outcome_amis2/Mplus/02_invariance/01_sdq_configural.inp"
+  ),
+  overwrite = TRUE
 )
 
 ##### CREATE M2_OverTimeResiduals_Free INPUT ####
@@ -262,12 +369,12 @@ writeLines(
 )
 
 ##### COPY INPUT TO GITHUB PROJECT ####
-copy_file_checked(
-  source_file = input_file,
-  target = file.path(
-    github_measurement_dir,
-    basename(input_file)
-  )
+file.copy(
+  from = input_file,
+  to = paste0(
+    "C:/Users/keil/Documents/main_outcome_amis2/Mplus/01_measurement/02_sdq_residuals_free.inp"
+  ),
+  overwrite = TRUE
 )
 
 ##### CREATE M3 METRIC INVARIANCE MODEL ####
@@ -374,12 +481,12 @@ writeLines(
 )
 
 ##### COPY INPUT TO GITHUB PROJECT ####
-copy_file_checked(
-  source_file = input_file,
-  target = file.path(
-    github_invariance_dir,
-    basename(input_file)
-  )
+file.copy(
+  from = input_file,
+  to = paste0(
+    "C:/Users/keil/Documents/main_outcome_amis2/Mplus/02_invariance/03_sdq_metric_invariance.inp"
+  ),
+  overwrite = TRUE
 )
 
 ##### CREATE M4 WITHIN-INFORMANT CROSS-SCALE MODEL ####
@@ -523,12 +630,14 @@ writeLines(
 )
 
 ##### COPY INPUT TO GITHUB PROJECT ####
-copy_file_checked(
-  source_file = input_file,
-  target = file.path(
-    github_measurement_dir,
-    basename(input_file)
-  )
+file.copy(
+  from = input_file,
+  to = paste0(
+    "C:/Users/keil/Documents/main_outcome_amis2/",
+    "Mplus/01_measurement/",
+    "04_sdq_within_informant_crossscale.inp"
+  ),
+  overwrite = TRUE
 )
 
 ##### CREATE M5 BETWEEN-INFORMANT RESIDUAL MODEL ####
@@ -688,12 +797,14 @@ writeLines(
 )
 
 ##### COPY INPUT TO GITHUB PROJECT ####
-copy_file_checked(
-  source_file = input_file,
-  target = file.path(
-    github_measurement_dir,
-    basename(input_file)
-  )
+file.copy(
+  from = input_file,
+  to = paste0(
+    "C:/Users/keil/Documents/main_outcome_amis2/",
+    "Mplus/01_measurement/",
+    "05_sdq_between_informant_residuals.inp"
+  ),
+  overwrite = TRUE
 )
 
 ##### CREATE M6 FULL SCALAR INVARIANCE MODEL ####
@@ -865,12 +976,14 @@ writeLines(
 )
 
 ##### COPY INPUT TO GITHUB PROJECT ####
-copy_file_checked(
-  source_file = input_file,
-  target = file.path(
-    github_invariance_dir,
-    basename(input_file)
-  )
+file.copy(
+  from = input_file,
+  to = paste0(
+    "C:/Users/keil/Documents/main_outcome_amis2/",
+    "Mplus/02_invariance/",
+    "06_sdq_full_scalar_invariance.inp"
+  ),
+  overwrite = TRUE
 )
 
 ##### CREATE M7 PARTIAL SCALAR INVARIANCE MODEL ####
@@ -1046,87 +1159,15 @@ writeLines(
 )
 
 ##### COPY INPUT TO GITHUB PROJECT ####
-copy_file_checked(
-  source_file = input_file,
-  target = file.path(
-    github_invariance_dir,
-    basename(input_file)
-  )
-)
-
-##### RUN INVARIANCE INPUT FILES
-
-#-----------------------------------------------------------------------
-##### RUN MPLUS MODELS INVARIANCE #####
-#-----------------------------------------------------------------------
-
-run_mplus_models <- TRUE
-
-invariance_input_files <- file.path(
-  mplus_input_dir,
-  c(
-    "01_sdq_configural.inp",
-    "02_sdq_residuals_free.inp",
-    "03_sdq_metric_invariance.inp",
-    "04_sdq_within_informant_crossscale.inp",
-    "05_sdq_between_informant_residuals.inp",
-    "06_sdq_full_scalar_invariance.inp",
+file.copy(
+  from = input_file,
+  to = paste0(
+    "C:/Users/keil/Documents/main_outcome_amis2/",
+    "Mplus/02_invariance/",
     "07_sdq_partial_scalar_invariance.inp"
-  )
+  ),
+  overwrite = TRUE
 )
-
-
-##### CHECK INPUT FILES #####
-
-missing_input_files <- invariance_input_files[
-  !file.exists(invariance_input_files)
-]
-
-if (length(missing_input_files) > 0) {
-  stop(
-    "The following Mplus input files are missing:\n",
-    paste(
-      missing_input_files,
-      collapse = "\n"
-    )
-  )
-}
-
-
-##### RUN MODELS #####
-
-if (run_mplus_models) {
-  
-  if (
-    MplusAutomation::mplusAvailable(
-      silent = FALSE
-    ) != 0
-  ) {
-    stop(
-      "Mplus could not be detected by MplusAutomation."
-    )
-  }
-  
-  MplusAutomation::runModels(
-    target = invariance_input_files,
-    
-    # Run the models even if an older .out file exists
-    replaceOutfile = "always",
-    
-    # Do not print the full Mplus estimation output in R
-    showOutput = FALSE,
-    
-    # Save a run log
-    logFile = file.path(
-      mplus_input_dir,
-      "SDQ_measurement_invariance_run.log"
-    ),
-    
-    # Show progress messages
-    quiet = FALSE
-  )
-}
-
 
 # ##### CREATE M8 PARTIAL SCALAR INVARIANCE MODEL ####
 # model_8_input <- paste0(
@@ -1714,83 +1755,35 @@ writeLines(
   con = input_file
 )
 
-#-----------------------------------------------------------------------
-##### RUN MPLUS MODEL LCS #####
-#-----------------------------------------------------------------------
-
-run_mplus_models <- TRUE
-
-lcs_input_files <- file.path(
-  mplus_input_dir,
-  c(
-    "08_sdq_classical_lcs.inp")
-)
-
-
-##### CHECK INPUT FILES #####
-
-missing_input_files <- lcs_input_files[
-  !file.exists(lcs_input_files)
-]
-
-if (length(missing_input_files) > 0) {
-  stop(
-    "The following Mplus input files are missing:\n",
-    paste(
-      missing_input_files,
-      collapse = "\n"
-    )
-  )
-}
-
-
-##### RUN MODELS #####
-
-if (run_mplus_models) {
-  
-  if (
-    MplusAutomation::mplusAvailable(
-      silent = FALSE
-    ) != 0
-  ) {
-    stop(
-      "Mplus could not be detected by MplusAutomation."
-    )
-  }
-  
-  MplusAutomation::runModels(
-    target = lcs_input_files,
-    
-    # Run the models even if an older .out file exists
-    replaceOutfile = "always",
-    
-    # Do not print the full Mplus estimation output in R
-    showOutput = FALSE,
-    
-    # Save a run log
-    logFile = file.path(
-      mplus_input_dir,
-      "SDQ_measurement_lcs_run.log"
-    ),
-    
-    # Show progress messages
-    quiet = FALSE
-  )
-}
-
 ##### COPY INPUT TO GITHUB PROJECT ####
-copy_file_checked(
-  source_file = input_file,
-  target = file.path(
-    github_lcs_dir,
-    basename(input_file)
-  )
+file.copy(
+  from = input_file,
+  to = github_lcs_dir,
+  overwrite = TRUE
 )
 
-#-------------------------------------------------------------
 
+
+
+###############################################################
 ##### WRITE TABLE WITH RESULTS OF MEASUREMENT INVARIANCE ####
-#-------------------------------------------------------------
+###############################################################
+
+##### DEFINE MPLUS OUTPUT DIRECTORY ####
+mplus_output_dir <- "C:/MPLUS/Inputs"
+
+##### DEFINE INVARIANCE RESULTS DIRECTORY ####
+invariance_results_dir <- paste0(
+  "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/",
+  "MAIN OUTCOME/03_results/Mplus/02_invariance"
+)
+
+dir.create(
+  invariance_results_dir,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
 ##### IDENTIFY INVARIANCE OUTPUT FILES ####
 invariance_output_files <- list.files(
   path = mplus_output_dir,
@@ -2353,9 +2346,12 @@ print(
     "Table_S1_SDQ_measurement_invariance_APA.docx"
   )
 )
-#-------------------------------------------------------------
+
+
+###############################################################
 ##### WRITE TABLE WITH RESULTS OF LATENT CHANGE MODEL ########
-#-------------------------------------------------------------
+###############################################################
+
 ##### DEFINE LCS OUTPUT FILE ####
 lcs_output_file <- file.path(
   mplus_input_dir,
@@ -2364,6 +2360,15 @@ lcs_output_file <- file.path(
 
 stopifnot(
   file.exists(lcs_output_file)
+)
+
+##### DEFINE LCS RESULTS DIRECTORY ####
+lcs_results_dir <- mplus_results_dir_lcs
+
+dir.create(
+  mplus_results_dir_lcs,
+  recursive = TRUE,
+  showWarnings = FALSE
 )
 
 ##### READ LCS OUTPUT ####
@@ -3092,221 +3097,3 @@ print(
     "Table_S2_SDQ_classical_lcs_APA.docx"
   )
 )
-
-
-#-------------------------------------------------------------------------
-##### SYNCHRONIZE AND ARCHIVE COMPLETED MPLUS MODELS #########
-#-------------------------------------------------------------------------
-##### DEFINE MODEL ROUTING ####
-model_routing <- list(
-  measurement = list(
-    files = c(
-      "02_sdq_residuals_free",
-      "04_sdq_within_informant_crossscale",
-      "05_sdq_between_informant_residuals"
-    ),
-    github_dir = github_measurement_dir,
-    results_dir = mplus_results_dir_measurement
-  ),
-  
-  invariance = list(
-    files = c(
-      "01_sdq_configural",
-      "03_sdq_metric_invariance",
-      "06_sdq_full_scalar_invariance",
-      "07_sdq_partial_scalar_invariance"
-    ),
-    github_dir = github_invariance_dir,
-    results_dir = mplus_results_dir_invariance
-  ),
-  
-  lcs = list(
-    files = c(
-      "08_sdq_classical_lcs"
-    ),
-    github_dir = github_lcs_dir,
-    results_dir = mplus_results_dir_lcs
-  )
-)
-
-##### DEFINE ARCHIVE ####
-archive_root <- file.path(
-  mplus_input_dir,
-  "archive"
-)
-
-archive_stamp <- format(
-  Sys.time(),
-  "%Y-%m-%d_%H%M"
-)
-
-dir.create(
-  archive_root,
-  recursive = TRUE,
-  showWarnings = FALSE
-)
-
-##### DEFINE CHECKED COPY FUNCTION ####
-copy_files_checked <- function(
-    files,
-    target_dir
-) {
-  
-  if (length(files) == 0) {
-    return(invisible(TRUE))
-  }
-  
-  dir.create(
-    target_dir,
-    recursive = TRUE,
-    showWarnings = FALSE
-  )
-  
-  copy_success <- file.copy(
-    from = files,
-    to = file.path(
-      target_dir,
-      basename(files)
-    ),
-    overwrite = TRUE
-  )
-  
-  if (!all(copy_success)) {
-    stop(
-      paste0(
-        "Could not copy all files to: ",
-        target_dir
-      )
-    )
-  }
-  
-  invisible(TRUE)
-}
-
-##### PROCESS MODEL GROUPS ####
-for (group_name in names(model_routing)) {
-  
-  group <- model_routing[[group_name]]
-  
-  input_files <- file.path(
-    mplus_input_dir,
-    paste0(
-      group$files,
-      ".inp"
-    )
-  )
-  
-  output_files <- file.path(
-    mplus_input_dir,
-    paste0(
-      group$files,
-      ".out"
-    )
-  )
-  
-  gh5_files <- file.path(
-    mplus_input_dir,
-    paste0(
-      group$files,
-      ".gh5"
-    )
-  )
-  
-  ##### CHECK REQUIRED FILES ####
-  required_files <- c(
-    input_files,
-    output_files
-  )
-  
-  missing_files <- required_files[
-    !file.exists(required_files)
-  ]
-  
-  if (length(missing_files) > 0) {
-    
-    print(
-      missing_files
-    )
-    
-    stop(
-      paste0(
-        "Required files are missing for group: ",
-        group_name
-      )
-    )
-  }
-  
-  ##### RETAIN EXISTING OPTIONAL GH5 FILES ####
-  gh5_files <- gh5_files[
-    file.exists(gh5_files)
-  ]
-  
-  result_files <- c(
-    output_files,
-    gh5_files
-  )
-  
-  all_model_files <- c(
-    input_files,
-    result_files
-  )
-  
-  ##### COPY INPUTS TO GITHUB ####
-  copy_files_checked(
-    files = input_files,
-    target_dir = group$github_dir
-  )
-  
-  ##### COPY OUTPUTS TO SEAGATE RESULTS ####
-  copy_files_checked(
-    files = result_files,
-    target_dir = group$results_dir
-  )
-  
-  ##### CREATE DATED GROUP ARCHIVE ####
-  group_archive_dir <- file.path(
-    archive_root,
-    paste0(
-      archive_stamp,
-      "_",
-      group_name
-    )
-  )
-  
-  ##### COPY ALL MODEL FILES TO ARCHIVE ####
-  copy_files_checked(
-    files = all_model_files,
-    target_dir = group_archive_dir
-  )
-  
-  ##### REMOVE ARCHIVED FILES FROM WORKING DIRECTORY ####
-  removal_success <- file.remove(
-    all_model_files
-  )
-  
-  if (!all(removal_success)) {
-    stop(
-      paste0(
-        "Could not remove all archived files for group: ",
-        group_name
-      )
-    )
-  }
-}
-
-##### SHOW REMAINING WORKING FILES ####
-message(
-  "\nSynchronization and archiving completed."
-)
-
-list.files(
-  mplus_input_dir
-)
-
-##### SHOW CREATED ARCHIVE DIRECTORIES ####
-list.dirs(
-  archive_root,
-  recursive = FALSE,
-  full.names = FALSE
-)
-#-------------------------------------------------------------------------

@@ -1,0 +1,238 @@
+TITLE:
+  M20: SDQ classical bivariate latent change score model
+  based on the final partial scalar invariance model
+  using the final M18 plus SES dataset;
+
+DATA:
+  FILE = AMIS_mplus_dataset_m18_ses.dat;
+
+VARIABLE:
+NAMES ARE
+    has_sdq has_mt has_cg has_diag diag_vor int_vor ext_vor int_ext aff_vor anx_vor
+    psy_vor vh_vor adhs_vor weit_vor abh_vor ess_vor tic_vor enur_vor enk_vor anp_vor
+    ptbs_vor bipo_vor md_vor dys_vor pan_vor gad_vor ago_vor soz_vor phob_vor zwa_vor
+    trn_vor cd_vor odd_vor dnos_vor bind_vor mut_vor sext5 age_b2 age_k2 age_p2 age_t2
+    age_b5 age_k5 age_p5 age_t5 emo_b2 emo_b5 emo_k2 emo_k5 emo_p2 emo_p5 emo_t2 emo_t5
+    con_b2 con_b5 con_k2 con_k5 con_p2 con_p5 con_t2 con_t5 hyp_b2 hyp_b5 hyp_k2 hyp_k5
+    hyp_p2 hyp_p5 hyp_t2 hyp_t5 pee_b2 pee_b5 pee_k2 pee_k5 pee_p2 pee_p5 pee_t2 pee_t5
+    pro_b2 pro_b5 pro_k2 pro_k5 pro_p2 pro_p5 pro_t2 pro_t5 mt_sdq5 mt_covag n6_sa
+    n5_sa nev_sa sev_sa fq_sa z6_sa z5_sa zev_sa zsv_sa zfq_sa zind_sa n6_kk n5_kk
+    nev_kk sev_kk fq_kk z6_kk z5_kk zev_kk zsv_kk zfq_kk zind_kk n6_vsa n5_vsa nev_vsa
+    sev_vsa fq_vsa z6_vsa z5_vsa zev_vsa zsv_vsa zfq_vsa zind_vsa n6_fsz n5_fsz nev_fsz
+    sev_fsz fq_fsz z6_fsz z5_fsz zev_fsz zsv_fsz zfq_fsz zind_fsz n6_ssz n5_ssz nev_ssz
+    sev_ssz fq_ssz z6_ssz z5_ssz zev_ssz zsv_ssz zfq_ssz zind_ssz n6_ja n5_ja nev_ja
+    sev_ja fq_ja z6_ja z5_ja zev_ja zsv_ja zfq_ja zind_ja n6_jea n5_jea nev_jea sev_jea
+    fq_jea z6_jea z5_jea zev_jea zsv_jea zfq_jea zind_jea mal_t1 n6_t1 n5_t1 nev_t1
+    sev_t1 fq_t1 chr_t1 nexp_t1 ncov_t1 mal_t12 n6_t12 n5_t12 nev_t12 sev_t12 fq_t12
+    chr_t12 nexp_t12 ncov_t12 mal_all n6_all n5_all nev_all sev_all fq_all chr_all
+    nexp_all ncov_all c6_t1 c5_t1 cev_t1 csv_t1 cfq_t1 cch_t1 c6_t12 c5_t12 cev_t12
+    csv_t12 cfq_t12 cch_t12 c6_all c5_all cev_all csv_all cfq_all cch_all d1a_s1 d1a_n1
+    d1a_e1 d1a_v1 d1a_c1 d1a_x1 d1a_p1 d1n_s1 d1n_n1 d1n_e1 d1n_v1 d1n_c1 d1n_x1 d1n_p1
+    d2a_s1 d2a_n1 d2a_e1 d2a_v1 d2a_c1 d2a_x1 d2a_p1 d2n_s1 d2n_n1 d2n_e1 d2n_v1 d2n_c1
+    d2n_x1 d2n_p1 d2e_s1 d2e_n1 d2e_e1 d2e_v1 d2e_c1 d2e_x1 d2e_p1 d1a_s2 d1a_n2 d1a_e2
+    d1a_v2 d1a_c2 d1a_x2 d1a_p2 d1n_s2 d1n_n2 d1n_e2 d1n_v2 d1n_c2 d1n_x2 d1n_p2 d2a_s2
+    d2a_n2 d2a_e2 d2a_v2 d2a_c2 d2a_x2 d2a_p2 d2n_s2 d2n_n2 d2n_e2 d2n_v2 d2n_c2 d2n_x2
+    d2n_p2 d2e_s2 d2e_n2 d2e_e2 d2e_v2 d2e_c2 d2e_x2 d2e_p2 d1a_sa d1a_na d1a_ea d1a_va
+    d1a_ca d1a_xa d1a_pa d1n_sa d1n_na d1n_ea d1n_va d1n_ca d1n_xa d1n_pa d2a_sa d2a_na
+    d2a_ea d2a_va d2a_ca d2a_xa d2a_pa d2n_sa d2n_na d2n_ea d2n_va d2n_ca d2n_xa d2n_pa
+    d2e_sa d2e_na d2e_ea d2e_va d2e_ca d2e_xa d2e_pa km_e1 km_v1 km_c1 km_x1 km_p1
+    sm_e1 sm_v1 sm_c1 sm_x1 sm_p1 ea_e1 ea_v1 ea_c1 ea_x1 ea_p1 en_e1 en_v1 en_c1 en_x1
+    en_p1 em_e1 em_v1 em_c1 em_x1 em_p1 mv_e1 mv_v1 mv_c1 mv_x1 mv_p1 mb_e1 mb_v1 mb_c1
+    mb_x1 mb_p1 bm_e1 bm_v1 bm_c1 bm_x1 bm_p1 mre_e1 mre_v1 mre_c1 mre_x1 mre_p1
+    mrbm_e1 mrbm_v1 mrbm_c1 mrbm_x1 mrbm_p1 km_e2 km_v2 km_c2 km_x2 km_p2 sm_e2 sm_v2
+    sm_c2 sm_x2 sm_p2 ea_e2 ea_v2 ea_c2 ea_x2 ea_p2 en_e2 en_v2 en_c2 en_x2 en_p2 em_e2
+    em_v2 em_c2 em_x2 em_p2 mv_e2 mv_v2 mv_c2 mv_x2 mv_p2 mb_e2 mb_v2 mb_c2 mb_x2 mb_p2
+    bm_e2 bm_v2 bm_c2 bm_x2 bm_p2 mre_e2 mre_v2 mre_c2 mre_x2 mre_p2 mrbm_e2 mrbm_v2
+    mrbm_c2 mrbm_x2 mrbm_p2 km_ea km_va km_ca km_xa km_pa sm_ea sm_va sm_ca sm_xa sm_pa
+    ea_ea ea_va ea_ca ea_xa ea_pa en_ea en_va en_ca en_xa en_pa em_ea em_va em_ca em_xa
+    em_pa mv_ea mv_va mv_ca mv_xa mv_pa mb_ea mb_va mb_ca mb_xa mb_pa bm_ea bm_va bm_ca
+    bm_xa bm_pa mre_ea mre_va mre_ca mre_xa mre_pa mrbm_ea mrbm_va mrbm_ca mrbm_xa
+    mrbm_pa km_s1 sm_s1 ea_s1 en_s1 em_s1 mv_s1 mb_s1 bm_s1 mre_s1 mrbm_s1 km_s2 sm_s2
+    ea_s2 en_s2 em_s2 mv_s2 mb_s2 bm_s2 mre_s2 mrbm_s2 km_sa sm_sa ea_sa en_sa em_sa
+    mv_sa mb_sa bm_sa mre_sa mrbm_sa c2p1raw c2p2raw c2p3raw c2p1log c2p2log c2p3log
+    c2p1_z c2p2_z c2p3_z c5_raw c5_log c5_z prs_e02 prs_e04 prs_e06 prs_eau prs_m02
+    prs_m04 prs_m06 prs_mau PC1 PC2 PC3 PC4 stat_t5 aget2 aget5m SIC_N m18_cls m18_p1
+    m18_p2 m18_p3 m18_pmx sesausb
+;
+
+  USEVARIABLES ARE
+     hyp_b2 hyp_k2 hyp_p2 hyp_b5 hyp_k5 hyp_p5 con_b2 con_k2 con_p2 con_b5 con_k5 con_p5
+    emo_b2 emo_k2 emo_p2 emo_b5 emo_k5 emo_p5;
+
+  MISSING ARE ALL (-999);
+  IDVARIABLE IS SIC_N;
+  USEOBSERVATIONS ARE stat_t5 NE 0;
+
+ANALYSIS:
+  TYPE = GENERAL;
+  ESTIMATOR = MLR;
+  COVERAGE = 0.01;
+
+MODEL:
+
+  ! -------------------------------------------------
+  ! Measurement model: externalizing and emotional problems
+  ! Three informants: primary caregiver, child, second caregiver
+  ! Equal factor loadings across T2 and T5
+  ! -------------------------------------------------
+
+  EXT2 BY
+    hyp_b2@1
+    hyp_k2 (ex2)
+    hyp_p2 (ex3)
+    con_b2 (ex4)
+    con_k2 (ex5)
+    con_p2 (ex6);
+
+  EXT5 BY
+    hyp_b5@1
+    hyp_k5 (ex2)
+    hyp_p5 (ex3)
+    con_b5 (ex4)
+    con_k5 (ex5)
+    con_p5 (ex6);
+
+  EMO2 BY
+    emo_b2@1
+    emo_k2 (le1)
+    emo_p2 (le2);
+
+  EMO5 BY
+    emo_b5@1
+    emo_k5 (le1)
+    emo_p5 (le2);
+
+  ! -------------------------------------------------
+  ! Final partial scalar invariance across T2 and T5
+  ! -------------------------------------------------
+
+  [hyp_b2 hyp_b5] (ihb);
+  [hyp_k2 hyp_k5] (ihk);
+  [hyp_p2 hyp_p5] (ihp);
+
+  [con_b2 con_b5] (icb);
+  [con_k2 con_k5] (ick);
+  [con_p2 con_p5] (icp);
+
+  [emo_b2 emo_b5] (ieb);
+  [emo_k2] (iek2);
+  [emo_k5] (iek5);
+  [emo_p2 emo_p5] (iep);
+
+  ! -------------------------------------------------
+  ! Correlated uniqueness across time
+  ! -------------------------------------------------
+
+  hyp_b2 WITH hyp_b5 (cu_hyp_b);
+  hyp_k2 WITH hyp_k5 (cu_hyp_k);
+  hyp_p2 WITH hyp_p5 (cu_hyp_p);
+
+  con_b2 WITH con_b5 (cu_con_b);
+  con_k2 WITH con_k5 (cu_con_k);
+  con_p2 WITH con_p5 (cu_con_p);
+
+  emo_b2 WITH emo_b5 (cu_emo_b);
+  emo_k2 WITH emo_k5 (cu_emo_k);
+  emo_p2 WITH emo_p5 (cu_emo_p);
+
+  ! -------------------------------------------------
+  ! Within-informant residual correlations at T2
+  ! -------------------------------------------------
+
+  hyp_b2 WITH con_b2 (w_b_hc);
+  hyp_k2 WITH con_k2 (w_k_hc);
+  hyp_p2 WITH con_p2 (w_p_hc);
+
+  emo_b2 WITH hyp_b2 (w_b_eh);
+  emo_b2 WITH con_b2 (w_b_ec);
+  emo_k2 WITH hyp_k2 (w_k_eh);
+  emo_k2 WITH con_k2 (w_k_ec);
+  emo_p2 WITH hyp_p2 (w_p_eh);
+  emo_p2 WITH con_p2 (w_p_ec);
+
+  ! -------------------------------------------------
+  ! Within-informant residual correlations at T5
+  ! -------------------------------------------------
+
+  hyp_b5 WITH con_b5 (w_b_hc);
+  hyp_k5 WITH con_k5 (w_k_hc);
+  hyp_p5 WITH con_p5 (w_p_hc);
+
+  emo_b5 WITH hyp_b5 (w_b_eh);
+  emo_b5 WITH con_b5 (w_b_ec);
+  emo_k5 WITH hyp_k5 (w_k_eh);
+  emo_k5 WITH con_k5 (w_k_ec);
+  emo_p5 WITH hyp_p5 (w_p_eh);
+  emo_p5 WITH con_p5 (w_p_ec);
+
+  ! -------------------------------------------------
+  ! Selected between-informant residual correlations
+  ! -------------------------------------------------
+
+  hyp_b2 WITH hyp_p2 (bh_hyp);
+  hyp_b5 WITH hyp_p5 (bh_hyp);
+
+  con_b2 WITH con_p2 (bh_con);
+  con_b5 WITH con_p5 (bh_con);
+
+  hyp_b2 WITH con_p2 (bp_cross);
+  hyp_b5 WITH con_p5 (bp_cross);
+
+  hyp_p2 WITH con_b2 (pb_cross);
+  hyp_p5 WITH con_b5 (pb_cross);
+
+  emo_b2 WITH emo_p2 (bh_emo);
+  emo_b5 WITH emo_p5 (bh_emo);
+
+  ! -------------------------------------------------
+  ! Classical two-wave latent change score model
+  ! -------------------------------------------------
+
+  ! Externalizing change
+
+  d_ext BY EXT5@1;
+  EXT5 ON EXT2@1;
+  EXT5@0;
+  [EXT5@0];
+
+  ! Emotional-problems change
+
+  d_emo BY EMO5@1;
+  EMO5 ON EMO2@1;
+  EMO5@0;
+  [EMO5@0];
+
+  ! Baseline latent means fixed for identification
+
+  [EXT2@0 EMO2@0];
+
+  ! Latent change means freely estimated
+
+  [d_ext d_emo];
+
+  ! Latent change variances freely estimated
+
+  d_ext;
+  d_emo;
+
+  ! Covariance between baseline levels
+
+  EXT2 WITH EMO2;
+
+  ! Covariances between baseline levels and latent changes
+
+  EXT2 WITH d_ext d_emo;
+  EMO2 WITH d_ext d_emo;
+
+  ! Covariance between latent changes
+
+  d_ext WITH d_emo;
+
+OUTPUT:
+  SAMPSTAT;
+  STANDARDIZED;
+  CINTERVAL;
+  TECH1;
+  TECH4;
+  MODINDICES(4.0);
+
