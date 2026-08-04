@@ -286,6 +286,71 @@ invariance_results_dir <- mplus_results_dir_invariance
 lcs_results_dir <- mplus_results_dir_lcs
 
 
+
+
+#-----------------------------------------------------------------------
+##### STANDARDIZED MODEL, TABLE, FIGURE, AND ARCHIVE DIRECTORIES #####
+#-----------------------------------------------------------------------
+
+# SeaDrive is the permanent project record. C:/MPLUS/Inputs remains the
+# local working directory used by Mplus.
+
+# Permanent copies of final Mplus syntax and outputs.
+mplus_results_inputs_dir <- file.path(
+  mplus_results_dir,
+  "00_model_files",
+  "inputs"
+)
+
+mplus_results_outputs_dir <- file.path(
+  mplus_results_dir,
+  "00_model_files",
+  "outputs"
+)
+
+mplus_results_sensitivity_dir <- file.path(
+  mplus_results_dir,
+  "06_sensitivity"
+)
+
+# All publication-ready tables and figures are stored centrally.
+tables_root_dir <- file.path(
+  mplus_results_dir,
+  "07_tables"
+)
+
+tables_manuscript_dir <- file.path(
+  tables_root_dir,
+  "manuscript"
+)
+
+tables_appendix_dir <- file.path(
+  tables_root_dir,
+  "appendix"
+)
+
+figures_root_dir <- file.path(
+  mplus_results_dir,
+  "08_figures"
+)
+
+figures_manuscript_dir <- file.path(
+  figures_root_dir,
+  "manuscript"
+)
+
+figures_appendix_dir <- file.path(
+  figures_root_dir,
+  "appendix"
+)
+
+# Local archive: dated immutable snapshots of files from C:/MPLUS/Inputs.
+mplus_local_archive_dir <- file.path(
+  mplus_archive_root,
+  "MAIN_OUTCOME"
+)
+
+
 #-----------------------------------------------------------------------
 ##### M18 RESULTS #####
 #-----------------------------------------------------------------------
@@ -356,6 +421,83 @@ github_m18_lcs_dir <- file.path(
 )
 
 
+#-------------------------------------------------------------------------
+##### M18B MALTREATED-ONLY DATA PATHS #####
+#-------------------------------------------------------------------------
+
+m18b_excel_file_mo <- file.path(
+  data_prep_dir,
+  "AMIS_merged_analysis_dataset_with_M18_classes_mo.xlsx"
+)
+
+m18b_prepared_rds_file_mo <- file.path(
+  data_prep_dir,
+  "AMIS_M18_analysis_prepared_mo.rds"
+)
+
+mplus_data_file_m18_mo <- file.path(
+  seadrive_mplus_data_dir,
+  "AMIS_mplus_dataset_m18_mo.dat"
+)
+
+mplus_data_rds_file_m18_mo <- file.path(
+  seadrive_mplus_data_dir,
+  "AMIS_mplus_dataset_m18_mo.rds"
+)
+
+mplus_names_file_m18_mo <- file.path(
+  seadrive_mplus_data_dir,
+  "AMIS_mplus_names_m18_mo.rds"
+)
+
+mplus_names_txt_file_m18_mo <- file.path(
+  seadrive_mplus_data_dir,
+  "AMIS_mplus_names_m18_mo.txt"
+)
+
+#-------------------------------------------------------------------------
+##### M18B MALTREATED-ONLY RESULTS PATHS #####
+#-------------------------------------------------------------------------
+
+m18b_class_checks_dir_mo <- file.path(
+  mplus_results_dir_maltreatment,
+  "01_class_description_mo"
+)
+
+m18b_lcs_results_dir_mo <- file.path(
+  mplus_results_dir_maltreatment,
+  "02_classes_predicting_change_mo"
+)
+
+m18b_class_checks_file_mo <- file.path(
+  m18b_class_checks_dir_mo,
+  "M18b_class_description_mo.xlsx"
+)
+
+m18b_word_file_mo <- file.path(
+  m18b_class_checks_dir_mo,
+  "M18b_class_characteristics_APA_mo.docx"
+)
+
+m18b_plot_file_mo <- file.path(
+  m18b_class_checks_dir_mo,
+  "M18b_mt_burden_trajectories_with_nonmaltreated_mo.png")
+
+#-------------------------------------------------------------------------
+##### M18B MALTREATED-ONLY GITHUB PATHS #####
+#-------------------------------------------------------------------------
+
+github_m18b_class_description_dir_mo <- file.path(
+  github_maltreatment_dir,
+  "01_class_description_mo"
+)
+
+github_m18b_lcs_dir_mo <- file.path(
+  github_maltreatment_dir,
+  "02_classes_predicting_change_mo"
+)
+
+
 #-----------------------------------------------------------------------
 ##### CREATE DIRECTORIES #####
 #-----------------------------------------------------------------------
@@ -371,6 +513,14 @@ project_directories <- c(
   mplus_results_dir_lcs,
   mplus_results_dir_maltreatment,
   mplus_results_dir_biology,
+  mplus_results_inputs_dir,
+  mplus_results_outputs_dir,
+  mplus_results_sensitivity_dir,
+  tables_manuscript_dir,
+  tables_appendix_dir,
+  figures_manuscript_dir,
+  figures_appendix_dir,
+  mplus_local_archive_dir,
   m18_class_checks_dir,
   m18_lcs_results_dir,
   github_mplus_dir,
@@ -380,7 +530,11 @@ project_directories <- c(
   github_maltreatment_dir,
   github_biology_dir,
   github_m18_class_dir,
-  github_m18_lcs_dir
+  github_m18_lcs_dir,
+  m18b_class_checks_dir_mo,
+  m18b_lcs_results_dir_mo,
+  github_m18b_class_description_dir_mo,
+  github_m18b_lcs_dir_mo
 )
 
 walk(
@@ -391,6 +545,8 @@ walk(
     showWarnings = FALSE
   )
 )
+
+
 
 
 #-----------------------------------------------------------------------

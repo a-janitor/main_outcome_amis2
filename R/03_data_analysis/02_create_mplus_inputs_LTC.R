@@ -2,7 +2,7 @@
 ##### SETUP #####
 #-------------------------------------------------------------------------
 
-source("C:/Users/keil/Documents/main_outcome_amis2/R/03_data_analysis/00_setup.R")
+source("C:/Users/keil/Documents/main_outcome_amis2/R/03_data_analysis/00_setup_standardized.R")
 
 check_packages(
   c(
@@ -2511,6 +2511,478 @@ tail(
 )
 
 #-------------------------------------------------------------------------
+##### M17 CLASSES MAL ONLY (ALTERNATIVE) #####
+#-------------------------------------------------------------------------
+#-------------------------------------------------------------------------
+##### CREATE M17B FROM EXISTING M17 INPUT: MALREATED-ONLY SAMPLE #####
+#-------------------------------------------------------------------------
+
+##### DEFINE FILES #####
+
+m17_source_file <- file.path(
+  mplus_input_dir,
+  "17_mt_burden_quadratic_2class.inp"
+)
+
+m17b_output_file <- file.path(
+  mplus_input_dir,
+  "17b_mt_burden_quadratic_2class_maltreated.inp"
+)
+
+stopifnot(
+  file.exists(m17_source_file)
+)
+
+
+##### READ EXISTING M17 INPUT #####
+
+m17b_syntax <- readLines(
+  m17_source_file,
+  warn = FALSE
+)
+
+
+##### CHECK THAT FILTER IS NOT ALREADY PRESENT #####
+
+if (
+  any(
+    grepl(
+      "USEOBSERVATIONS",
+      m17b_syntax,
+      ignore.case = TRUE
+    )
+  )
+) {
+  stop(
+    "The source input already contains a USEOBSERVATIONS statement."
+  )
+}
+
+
+##### LOCATE IDVARIABLE STATEMENT #####
+
+idvariable_position <- grep(
+  "^\\s*IDVARIABLE\\s+IS\\s+SIC_N\\s*;",
+  m17b_syntax,
+  ignore.case = TRUE
+)
+
+if (length(idvariable_position) != 1) {
+  stop(
+    "Could not identify exactly one 'IDVARIABLE IS SIC_N;' statement."
+  )
+}
+
+
+##### INSERT MALREATED-ONLY FILTER #####
+
+m17b_syntax <- append(
+  m17b_syntax,
+  values = "  USEOBSERVATIONS ARE mal_all EQ 1;",
+  after = idvariable_position
+)
+
+
+##### UPDATE TITLE #####
+
+m17b_syntax <- sub(
+  "M17: Two-class quadratic growth mixture model for",
+  "M17b: Two-class quadratic growth mixture model among maltreated participants for",
+  m17b_syntax,
+  fixed = TRUE
+)
+
+
+##### SAVE NEW INPUT #####
+
+writeLines(
+  m17b_syntax,
+  con = m17b_output_file
+)
+
+
+##### FINAL CHECKS #####
+
+saved_m17b_syntax <- readLines(
+  m17b_output_file,
+  warn = FALSE
+)
+
+stopifnot(
+  file.exists(m17b_output_file),
+  
+  sum(
+    grepl(
+      "USEOBSERVATIONS ARE mal_all EQ 1;",
+      saved_m17b_syntax,
+      fixed = TRUE
+    )
+  ) == 1,
+  
+  any(
+    grepl(
+      "CLASSES = c\\(2\\);",
+      saved_m17b_syntax,
+      ignore.case = TRUE
+    )
+  )
+)
+
+
+##### OPTIONAL: COPY TO GITHUB #####
+
+github_m17b_file <- file.path(
+  github_maltreatment_dir,
+  basename(m17b_output_file)
+)
+
+copy_success <- file.copy(
+  from = m17b_output_file,
+  to = github_m17b_file,
+  overwrite = TRUE
+)
+
+stopifnot(
+  copy_success,
+  file.exists(github_m17b_file)
+)
+
+
+cat(
+  "\nM17b input created successfully.",
+  "\nLocal input:",
+  "\n", m17b_output_file,
+  "\n",
+  "\nGitHub copy:",
+  "\n", github_m17b_file,
+  "\n",
+  sep = ""
+)
+
+
+#-------------------------------------------------------------------------
+##### CREATE M18B FROM EXISTING M18 INPUT: MALTREATED-ONLY SAMPLE #####
+#-------------------------------------------------------------------------
+
+##### DEFINE FILES #####
+
+m18_source_file <- file.path(
+  mplus_input_dir,
+  "18_mt_burden_quadratic_3class.inp"
+)
+
+m18b_output_file <- file.path(
+  mplus_input_dir,
+  "18b_mt_burden_quadratic_3class_maltreated.inp"
+)
+
+stopifnot(
+  file.exists(m18_source_file)
+)
+
+
+##### READ EXISTING M18 INPUT #####
+
+m18b_syntax <- readLines(
+  m18_source_file,
+  warn = FALSE
+)
+
+
+##### CHECK THAT FILTER IS NOT ALREADY PRESENT #####
+
+if (
+  any(
+    grepl(
+      "USEOBSERVATIONS",
+      m18b_syntax,
+      ignore.case = TRUE
+    )
+  )
+) {
+  stop(
+    "The source input already contains a USEOBSERVATIONS statement."
+  )
+}
+
+
+##### LOCATE IDVARIABLE STATEMENT #####
+
+idvariable_position <- grep(
+  "^\\s*IDVARIABLE\\s+IS\\s+SIC_N\\s*;",
+  m18b_syntax,
+  ignore.case = TRUE
+)
+
+if (length(idvariable_position) != 1) {
+  stop(
+    "Could not identify exactly one 'IDVARIABLE IS SIC_N;' statement."
+  )
+}
+
+
+##### INSERT MALTREATED-ONLY FILTER #####
+
+m18b_syntax <- append(
+  m18b_syntax,
+  values = "  USEOBSERVATIONS ARE mal_all EQ 1;",
+  after = idvariable_position
+)
+
+
+##### UPDATE TITLE #####
+
+m18b_syntax <- sub(
+  "M18: Three-class quadratic growth mixture model for",
+  "M18b: Three-class quadratic growth mixture model among maltreated participants for",
+  m18b_syntax,
+  fixed = TRUE
+)
+
+
+##### UPDATE SAVEDATA FILE NAME #####
+
+m18b_syntax <- sub(
+  "FILE = 18_mt_burden_quadratic_3class_cprob.dat;",
+  "FILE = 18b_mt_burden_quadratic_3class_maltreated_cprob.dat;",
+  m18b_syntax,
+  fixed = TRUE
+)
+
+
+##### SAVE NEW INPUT #####
+
+writeLines(
+  m18b_syntax,
+  con = m18b_output_file
+)
+
+
+##### FINAL CHECKS #####
+
+saved_m18b_syntax <- readLines(
+  m18b_output_file,
+  warn = FALSE
+)
+
+stopifnot(
+  file.exists(m18b_output_file),
+  
+  sum(
+    grepl(
+      "USEOBSERVATIONS ARE mal_all EQ 1;",
+      saved_m18b_syntax,
+      fixed = TRUE
+    )
+  ) == 1,
+  
+  any(
+    grepl(
+      "CLASSES = c\\(3\\);",
+      saved_m18b_syntax,
+      ignore.case = TRUE
+    )
+  ),
+  
+  any(
+    grepl(
+      "FILE = 18b_mt_burden_quadratic_3class_maltreated_cprob.dat;",
+      saved_m18b_syntax,
+      fixed = TRUE
+    )
+  )
+)
+
+
+##### COPY TO GITHUB #####
+
+github_m18b_file <- file.path(
+  github_maltreatment_dir,
+  basename(m18b_output_file)
+)
+
+copy_success <- file.copy(
+  from = m18b_output_file,
+  to = github_m18b_file,
+  overwrite = TRUE
+)
+
+stopifnot(
+  copy_success,
+  file.exists(github_m18b_file)
+)
+
+
+cat(
+  "\nM18b input created successfully.",
+  "\nLocal input:",
+  "\n", m18b_output_file,
+  "\n",
+  "\nGitHub copy:",
+  "\n", github_m18b_file,
+  "\n",
+  sep = ""
+)
+
+#-------------------------------------------------------------------------
+##### CREATE M19B FROM EXISTING M19 INPUT: MALTREATED-ONLY SAMPLE #####
+#-------------------------------------------------------------------------
+
+##### DEFINE FILES #####
+
+m19_source_file <- file.path(
+  mplus_input_dir,
+  "19_mt_burden_quadratic_4class.inp"
+)
+
+m19b_output_file <- file.path(
+  mplus_input_dir,
+  "19b_mt_burden_quadratic_4class_maltreated.inp"
+)
+
+stopifnot(
+  file.exists(m19_source_file)
+)
+
+
+##### READ EXISTING M19 INPUT #####
+
+m19b_syntax <- readLines(
+  m19_source_file,
+  warn = FALSE
+)
+
+
+##### CHECK THAT FILTER IS NOT ALREADY PRESENT #####
+
+if (
+  any(
+    grepl(
+      "USEOBSERVATIONS",
+      m19b_syntax,
+      ignore.case = TRUE
+    )
+  )
+) {
+  stop(
+    "The source input already contains a USEOBSERVATIONS statement."
+  )
+}
+
+
+##### LOCATE IDVARIABLE STATEMENT #####
+
+idvariable_position <- grep(
+  "^\\s*IDVARIABLE\\s+IS\\s+SIC_N\\s*;",
+  m19b_syntax,
+  ignore.case = TRUE
+)
+
+if (length(idvariable_position) != 1) {
+  stop(
+    "Could not identify exactly one 'IDVARIABLE IS SIC_N;' statement."
+  )
+}
+
+
+##### INSERT MALTREATED-ONLY FILTER #####
+
+m19b_syntax <- append(
+  m19b_syntax,
+  values = "  USEOBSERVATIONS ARE mal_all EQ 1;",
+  after = idvariable_position
+)
+
+
+##### UPDATE TITLE #####
+
+m19b_syntax <- sub(
+  "M19: Four-class quadratic growth mixture model for",
+  "M19b: Four-class quadratic growth mixture model among maltreated participants for",
+  m19b_syntax,
+  fixed = TRUE
+)
+
+
+##### SAVE NEW INPUT #####
+
+writeLines(
+  m19b_syntax,
+  con = m19b_output_file
+)
+
+
+##### FINAL CHECKS #####
+
+saved_m19b_syntax <- readLines(
+  m19b_output_file,
+  warn = FALSE
+)
+
+stopifnot(
+  file.exists(m19b_output_file),
+  
+  sum(
+    grepl(
+      "USEOBSERVATIONS ARE mal_all EQ 1;",
+      saved_m19b_syntax,
+      fixed = TRUE
+    )
+  ) == 1,
+  
+  any(
+    grepl(
+      "CLASSES = c\\(4\\);",
+      saved_m19b_syntax,
+      ignore.case = TRUE
+    )
+  )
+)
+
+
+##### COPY TO GITHUB #####
+
+github_m19b_file <- file.path(
+  github_maltreatment_dir,
+  basename(m19b_output_file)
+)
+
+copy_success <- file.copy(
+  from = m19b_output_file,
+  to = github_m19b_file,
+  overwrite = TRUE
+)
+
+stopifnot(
+  copy_success,
+  file.exists(github_m19b_file)
+)
+
+
+cat(
+  "\nM19b input created successfully.",
+  "\nLocal input:",
+  "\n", m19b_output_file,
+  "\n",
+  "\nGitHub copy:",
+  "\n", github_m19b_file,
+  "\n",
+  sep = ""
+)
+
+##### RUN M17b - M19b ####
+
+MplusAutomation::runModels(
+  target = c(m17b_output_file,
+    m18b_output_file,
+    m19b_output_file),
+  replaceOutfile = "always",
+  showOutput = FALSE,
+  quiet = FALSE,
+  killOnFail = TRUE
+)
+
+#-------------------------------------------------------------------------
 ##### SAVE MPLUS DATASET WITH M18 CLASSES #####
 #-------------------------------------------------------------------------
 
@@ -2844,6 +3316,974 @@ cat(
   "\n",
   sep = ""
 )
+
+#-------------------------------------------------------------------------
+##### SAVE MPLUS DATASET WITH M18B CLASSES + NON-MALTREATED REFERENCE #####
+#-------------------------------------------------------------------------
+
+##### M18B MPLUS OUTPUT #####
+
+m18b_output_file_mo <- file.path(
+  mplus_input_dir,
+  "18b_mt_burden_quadratic_3class_maltreated.out"
+)
+
+assert_file_exists(
+  m18b_output_file_mo,
+  "M18b maltreated-only Mplus output"
+)
+
+
+##### LOCAL MPLUS OUTPUT FILES #####
+
+mplus_data_file_m18_mo <- file.path(
+  mplus_input_dir,
+  "AMIS_mplus_dataset_m18_mo.dat"
+)
+
+mplus_names_file_m18_mo <- file.path(
+  mplus_input_dir,
+  "AMIS_mplus_names_m18_mo.rds"
+)
+
+mplus_names_text_file_m18_mo <- file.path(
+  mplus_input_dir,
+  "AMIS_mplus_names_m18_mo.txt"
+)
+
+mplus_rds_file_m18_mo <- file.path(
+  mplus_input_dir,
+  "AMIS_mplus_dataset_m18_mo.rds"
+)
+
+
+##### SEADRIVE MPLUS OUTPUT FILES #####
+
+seadrive_mplus_data_file_m18_mo <- file.path(
+  seadrive_mplus_data_dir,
+  basename(mplus_data_file_m18_mo)
+)
+
+seadrive_mplus_names_file_m18_mo <- file.path(
+  seadrive_mplus_data_dir,
+  basename(mplus_names_file_m18_mo)
+)
+
+seadrive_mplus_names_text_file_m18_mo <- file.path(
+  seadrive_mplus_data_dir,
+  basename(mplus_names_text_file_m18_mo)
+)
+
+seadrive_mplus_rds_file_m18_mo <- file.path(
+  seadrive_mplus_data_dir,
+  basename(mplus_rds_file_m18_mo)
+)
+
+
+##### EXCEL OUTPUT FILE #####
+
+excel_file_m18_mo <- file.path(
+  data_prep_dir,
+  "AMIS_merged_analysis_dataset_with_M18_classes_mo.xlsx"
+)
+
+
+#-------------------------------------------------------------------------
+##### READ M18B CLASS-PROBABILITY OUTPUT #####
+#-------------------------------------------------------------------------
+
+m18b_results_mo <- MplusAutomation::readModels(
+  target = m18b_output_file_mo,
+  what = "all"
+)
+
+if (is.null(m18b_results_mo$savedata)) {
+  stop(
+    paste0(
+      "No SAVEDATA results were found in ",
+      basename(m18b_output_file_mo),
+      ". Check whether SAVE = CPROBABILITIES was requested."
+    )
+  )
+}
+
+m18b_savedata_mo <- m18b_results_mo$savedata |>
+  as_tibble()
+
+names(m18b_savedata_mo) <- tolower(
+  names(m18b_savedata_mo)
+)
+
+
+##### CHECK SAVED VARIABLES #####
+
+required_m18b_saved_variables_mo <- c(
+  "sic_n",
+  "c",
+  "cprob1",
+  "cprob2",
+  "cprob3"
+)
+
+missing_m18b_saved_variables_mo <- setdiff(
+  required_m18b_saved_variables_mo,
+  names(m18b_savedata_mo)
+)
+
+if (length(missing_m18b_saved_variables_mo) > 0) {
+  stop(
+    "Missing M18b SAVEDATA variables: ",
+    paste(
+      missing_m18b_saved_variables_mo,
+      collapse = ", "
+    )
+  )
+}
+
+
+#-------------------------------------------------------------------------
+##### CREATE MALTREATED-ONLY CLASS ASSIGNMENTS #####
+#-------------------------------------------------------------------------
+
+##### CLASS LABELS #####
+
+# These labels follow the current interpretation of the M18b output.
+# Check them once more against the final trajectory plot before publication.
+
+m18b_labels_mo <- c(
+  "Moderate and initially increasing burden",
+  "Elevated and declining burden",
+  "High burden with later rebound"
+)
+
+
+##### CREATE CLASS DATA #####
+
+m18b_class_assignments_mo <- m18b_savedata_mo |>
+  transmute(
+    SIC_N = as.integer(sic_n),
+    
+    # Original M18b classes among maltreated children: 1–3
+    mt_class_mo_original = as.integer(c),
+    
+    mt_prob_mo_original1 = as.numeric(cprob1),
+    mt_prob_mo_original2 = as.numeric(cprob2),
+    mt_prob_mo_original3 = as.numeric(cprob3),
+    
+    mt_prob_mo_original_max = pmax(
+      cprob1,
+      cprob2,
+      cprob3
+    )
+  ) |>
+  mutate(
+    # Shift maltreated-only classes from 1–3 to 2–4
+    mt_class_mo = mt_class_mo_original + 1L,
+    
+    mt_class_label_mo = case_when(
+      mt_class_mo == 2L ~ m18b_labels_mo[1],
+      mt_class_mo == 3L ~ m18b_labels_mo[2],
+      mt_class_mo == 4L ~ m18b_labels_mo[3],
+      TRUE ~ NA_character_
+    )
+  )
+
+
+##### CHECK MALTREATED-ONLY ASSIGNMENTS #####
+
+stopifnot(
+  nrow(m18b_class_assignments_mo) == 303,
+  anyDuplicated(m18b_class_assignments_mo$SIC_N) == 0,
+  !anyNA(m18b_class_assignments_mo$SIC_N),
+  !anyNA(m18b_class_assignments_mo$mt_class_mo_original),
+  all(m18b_class_assignments_mo$mt_class_mo_original %in% 1:3),
+  all(m18b_class_assignments_mo$mt_class_mo %in% 2:4),
+  all(
+    m18b_class_assignments_mo$mt_prob_mo_original_max >= 0 &
+      m18b_class_assignments_mo$mt_prob_mo_original_max <= 1
+  )
+)
+
+
+##### CHECK CLASS MATCHES MAXIMUM POSTERIOR PROBABILITY #####
+
+posterior_matrix_m18b_mo <- m18b_class_assignments_mo |>
+  select(
+    mt_prob_mo_original1,
+    mt_prob_mo_original2,
+    mt_prob_mo_original3
+  ) |>
+  as.matrix()
+
+stopifnot(
+  all(
+    abs(
+      rowSums(posterior_matrix_m18b_mo) - 1
+    ) < 0.01
+  ),
+  all(
+    m18b_class_assignments_mo$mt_class_mo_original ==
+      max.col(
+        posterior_matrix_m18b_mo,
+        ties.method = "first"
+      )
+  )
+)
+
+
+#-------------------------------------------------------------------------
+##### LOAD ORIGINAL MPLUS DATASET #####
+#-------------------------------------------------------------------------
+
+dat_mplus <- read_delim(
+  file = mplus_data_file,
+  delim = "\t",
+  col_names = mplus_names,
+  na = "-999",
+  trim_ws = TRUE,
+  col_types = cols(
+    .default = col_double()
+  ),
+  progress = FALSE,
+  name_repair = "minimal"
+)
+
+
+##### CHECK ORIGINAL MPLUS DATASET #####
+
+stopifnot(
+  ncol(dat_mplus) == length(mplus_names),
+  identical(names(dat_mplus), mplus_names),
+  all(vapply(dat_mplus, is.numeric, logical(1))),
+  "SIC_N" %in% names(dat_mplus),
+  "mal_all" %in% names(dat_mplus),
+  !anyNA(dat_mplus$SIC_N),
+  anyDuplicated(dat_mplus$SIC_N) == 0
+)
+
+
+##### CHECK MALTREATMENT STATUS CODING #####
+
+observed_mal_all_values_mo <- sort(
+  unique(
+    na.omit(
+      dat_mplus$mal_all
+    )
+  )
+)
+
+stopifnot(
+  all(
+    observed_mal_all_values_mo %in% c(
+      0,
+      1
+    )
+  )
+)
+
+cat(
+  "\nMaltreatment-status distribution:\n"
+)
+
+print(
+  table(
+    dat_mplus$mal_all,
+    useNA = "ifany"
+  )
+)
+
+
+#-------------------------------------------------------------------------
+##### AUDIT M18B SAMPLE AGAINST MAL_ALL #####
+#-------------------------------------------------------------------------
+
+m18b_status_audit_mo <- m18b_class_assignments_mo |>
+  left_join(
+    dat_mplus |>
+      select(
+        SIC_N,
+        mal_all
+      ),
+    by = "SIC_N"
+  )
+
+stopifnot(
+  nrow(m18b_status_audit_mo) ==
+    nrow(m18b_class_assignments_mo),
+  
+  anyDuplicated(m18b_status_audit_mo$SIC_N) == 0,
+  
+  !anyNA(m18b_status_audit_mo$mal_all),
+  
+  all(
+    m18b_status_audit_mo$mal_all == 1
+  ),
+  
+  sum(
+    dat_mplus$mal_all == 1,
+    na.rm = TRUE
+  ) ==
+    nrow(m18b_class_assignments_mo)
+)
+
+
+##### ENSURE NO NON-MALTREATED CHILD RECEIVED AN M18B CLASS #####
+
+stopifnot(
+  !any(
+    m18b_class_assignments_mo$SIC_N %in%
+      dat_mplus$SIC_N[
+        dat_mplus$mal_all == 0
+      ]
+  )
+)
+
+
+#-------------------------------------------------------------------------
+##### CREATE COMBINED FOUR-GROUP CLASSIFICATION #####
+#-------------------------------------------------------------------------
+
+combined_classes_mo <- dat_mplus |>
+  select(
+    SIC_N,
+    mal_all
+  ) |>
+  left_join(
+    m18b_class_assignments_mo,
+    by = "SIC_N"
+  ) |>
+  mutate(
+    # Combined class:
+    # 1 = non-maltreated
+    # 2–4 = M18b maltreated-only trajectory classes
+    
+    mt_class_mo = case_when(
+      mal_all == 0 ~ 1L,
+      mal_all == 1 ~ mt_class_mo,
+      TRUE ~ NA_integer_
+    ),
+    
+    mt_class_label_mo = case_when(
+      mt_class_mo == 1L ~ "Non-maltreated",
+      mt_class_mo == 2L ~ m18b_labels_mo[1],
+      mt_class_mo == 3L ~ m18b_labels_mo[2],
+      mt_class_mo == 4L ~ m18b_labels_mo[3],
+      TRUE ~ NA_character_
+    ),
+    
+# Posterior probabilities in the combined four-group solution
+   
+    
+    mt_prob_class1_mo = case_when(
+      mal_all == 0 ~ 1,
+      mal_all == 1 ~ 0,
+      TRUE ~ NA_real_
+    ),
+    
+    mt_prob_class2_mo = case_when(
+      mal_all == 0 ~ 0,
+      mal_all == 1 ~ mt_prob_mo_original1,
+      TRUE ~ NA_real_
+    ),
+    
+    mt_prob_class3_mo = case_when(
+      mal_all == 0 ~ 0,
+      mal_all == 1 ~ mt_prob_mo_original2,
+      TRUE ~ NA_real_
+    ),
+    
+    mt_prob_class4_mo = case_when(
+      mal_all == 0 ~ 0,
+      mal_all == 1 ~ mt_prob_mo_original3,
+      TRUE ~ NA_real_
+    ),
+    
+    mt_prob_max_mo = case_when(
+      mal_all == 0 ~ 1,
+      mal_all == 1 ~ mt_prob_mo_original_max,
+      TRUE ~ NA_real_
+    )
+  ) |>
+  select(
+    SIC_N,
+    mal_all,
+    mt_class_mo,
+    mt_prob_class1_mo,
+    mt_prob_class2_mo,
+    mt_prob_class3_mo,
+    mt_prob_class4_mo,
+    mt_prob_max_mo,
+    mt_class_label_mo
+  )
+
+
+#-------------------------------------------------------------------------
+##### CHECK COMBINED FOUR-GROUP CLASSIFICATION #####
+#-------------------------------------------------------------------------
+
+stopifnot(
+  nrow(combined_classes_mo) == nrow(dat_mplus),
+  anyDuplicated(combined_classes_mo$SIC_N) == 0,
+  
+  all(
+    combined_classes_mo$mt_class_mo[
+      !is.na(combined_classes_mo$mal_all) &
+        combined_classes_mo$mal_all == 0
+    ] == 1
+  ),
+  
+  all(
+    combined_classes_mo$mt_class_mo[
+      !is.na(combined_classes_mo$mal_all) &
+        combined_classes_mo$mal_all == 1
+    ] %in% 2:4
+  ),
+  
+  all(
+    is.na(
+      combined_classes_mo$mt_class_mo[
+        is.na(combined_classes_mo$mal_all)
+      ]
+    )
+  )
+)
+
+
+##### CHECK POSTERIOR PROBABILITY SUMS #####
+
+combined_probability_matrix_mo <- combined_classes_mo |>
+  filter(
+    !is.na(mt_class_mo)
+  ) |>
+  select(
+    mt_prob_class1_mo,
+    mt_prob_class2_mo,
+    mt_prob_class3_mo,
+    mt_prob_class4_mo
+  ) |>
+  as.matrix()
+
+stopifnot(
+  !anyNA(combined_probability_matrix_mo),
+  all(
+    abs(
+      rowSums(combined_probability_matrix_mo) - 1
+    ) < 0.01
+  )
+)
+
+
+##### CHECK ASSIGNED CLASS MATCHES MAXIMUM PROBABILITY #####
+
+combined_classification_check_mo <- combined_classes_mo |>
+  filter(
+    !is.na(mt_class_mo)
+  )
+
+stopifnot(
+  all(
+    combined_classification_check_mo$mt_class_mo ==
+      max.col(
+        combined_probability_matrix_mo,
+        ties.method = "first"
+      )
+  )
+)
+
+
+##### DISPLAY CLASS DISTRIBUTION #####
+
+combined_class_distribution_mo <- combined_classes_mo |>
+  filter(
+    !is.na(mt_class_mo)
+  ) |>
+  count(
+    mt_class_mo,
+    mt_class_label_mo,
+    name = "n"
+  ) |>
+  mutate(
+    percent = 100 * n / sum(n)
+  ) |>
+  arrange(
+    mt_class_mo
+  )
+
+print(
+  combined_class_distribution_mo,
+  n = Inf
+)
+
+
+#-------------------------------------------------------------------------
+##### PREPARE SHORT MPLUS CLASS VARIABLES #####
+#-------------------------------------------------------------------------
+
+classes_mplus_mo <- combined_classes_mo |>
+  transmute(
+    SIC_N,
+    
+    # All Mplus names must contain no more than eight characters
+    mo_cls = as.numeric(mt_class_mo),
+    mo_p1  = mt_prob_class1_mo,
+    mo_p2  = mt_prob_class2_mo,
+    mo_p3  = mt_prob_class3_mo,
+    mo_p4  = mt_prob_class4_mo,
+    mo_pmx = mt_prob_max_mo
+  )
+
+
+##### CHECK MPLUS CLASS VARIABLES #####
+
+stopifnot(
+  anyDuplicated(classes_mplus_mo$SIC_N) == 0,
+  all(nchar(names(classes_mplus_mo)) <= 8),
+  
+  all(
+    na.omit(
+      classes_mplus_mo$mo_cls
+    ) %in% 1:4
+  )
+)
+
+
+#-------------------------------------------------------------------------
+##### MERGE COMBINED CLASSES WITH ORIGINAL MPLUS DATASET #####
+#-------------------------------------------------------------------------
+
+dat_mplus_m18_mo <- dat_mplus |>
+  left_join(
+    classes_mplus_mo,
+    by = "SIC_N"
+  )
+
+
+##### CHECK MPLUS MERGE #####
+
+stopifnot(
+  nrow(dat_mplus_m18_mo) == nrow(dat_mplus),
+  anyDuplicated(dat_mplus_m18_mo$SIC_N) == 0,
+  identical(
+    dat_mplus_m18_mo$SIC_N,
+    dat_mplus$SIC_N
+  ),
+  all(vapply(dat_mplus_m18_mo, is.numeric, logical(1))),
+  all(
+    c(
+      "mo_cls",
+      "mo_p1",
+      "mo_p2",
+      "mo_p3",
+      "mo_p4",
+      "mo_pmx"
+    ) %in% names(dat_mplus_m18_mo)
+  ),
+  all(nchar(names(dat_mplus_m18_mo)) <= 8),
+  anyDuplicated(names(dat_mplus_m18_mo)) == 0
+)
+
+
+#-------------------------------------------------------------------------
+##### PREPARE MPLUS EXPORT #####
+#-------------------------------------------------------------------------
+
+dat_mplus_m18_mo_for_export <- dat_mplus_m18_mo
+
+
+##### REPLACE MISSING VALUES WITH -999 #####
+
+dat_mplus_m18_mo_export <- dat_mplus_m18_mo_for_export |>
+  mutate(
+    across(
+      everything(),
+      ~ replace(
+        .x,
+        is.na(.x),
+        -999
+      )
+    )
+  )
+
+stopifnot(
+  all(vapply(dat_mplus_m18_mo_export, is.numeric, logical(1))),
+  sum(is.na(dat_mplus_m18_mo_export)) == 0,
+  all(nchar(names(dat_mplus_m18_mo_export)) <= 8),
+  anyDuplicated(names(dat_mplus_m18_mo_export)) == 0
+)
+
+
+#-------------------------------------------------------------------------
+##### SAVE LOCAL MPLUS FILES #####
+#-------------------------------------------------------------------------
+
+write.table(
+  dat_mplus_m18_mo_export,
+  file = mplus_data_file_m18_mo,
+  sep = "\t",
+  row.names = FALSE,
+  col.names = FALSE,
+  quote = FALSE,
+  dec = "."
+)
+
+
+##### SAVE MPLUS VARIABLE NAMES #####
+
+mplus_names_m18_mo <- names(
+  dat_mplus_m18_mo_for_export
+)
+
+saveRDS(
+  mplus_names_m18_mo,
+  mplus_names_file_m18_mo
+)
+
+writeLines(
+  mplus_names_m18_mo,
+  mplus_names_text_file_m18_mo
+)
+
+
+##### SAVE R DATASET WITH ORIGINAL MISSING VALUES #####
+
+saveRDS(
+  dat_mplus_m18_mo_for_export,
+  mplus_rds_file_m18_mo
+)
+
+
+#-------------------------------------------------------------------------
+##### CHECK LOCAL MPLUS FILES #####
+#-------------------------------------------------------------------------
+
+stopifnot(
+  file.exists(mplus_data_file_m18_mo),
+  file.exists(mplus_names_file_m18_mo),
+  file.exists(mplus_names_text_file_m18_mo),
+  file.exists(mplus_rds_file_m18_mo),
+  
+  identical(
+    readRDS(mplus_names_file_m18_mo),
+    names(dat_mplus_m18_mo_for_export)
+  ),
+  
+  identical(
+    names(
+      readRDS(mplus_rds_file_m18_mo)
+    ),
+    names(dat_mplus_m18_mo_for_export)
+  )
+)
+
+
+##### CHECK NUMBER OF EXPORTED COLUMNS #####
+
+number_of_exported_columns_m18_mo <- length(
+  strsplit(
+    readLines(
+      mplus_data_file_m18_mo,
+      n = 1,
+      warn = FALSE
+    ),
+    split = "\t",
+    fixed = TRUE
+  )[[1]]
+)
+
+stopifnot(
+  number_of_exported_columns_m18_mo ==
+    length(mplus_names_m18_mo)
+)
+
+
+#-------------------------------------------------------------------------
+##### COPY MPLUS FILES TO SEADRIVE #####
+#-------------------------------------------------------------------------
+
+copy_results_m18_mo <- c(
+  file.copy(
+    from = mplus_data_file_m18_mo,
+    to = seadrive_mplus_data_file_m18_mo,
+    overwrite = TRUE
+  ),
+  
+  file.copy(
+    from = mplus_names_file_m18_mo,
+    to = seadrive_mplus_names_file_m18_mo,
+    overwrite = TRUE
+  ),
+  
+  file.copy(
+    from = mplus_names_text_file_m18_mo,
+    to = seadrive_mplus_names_text_file_m18_mo,
+    overwrite = TRUE
+  ),
+  
+  file.copy(
+    from = mplus_rds_file_m18_mo,
+    to = seadrive_mplus_rds_file_m18_mo,
+    overwrite = TRUE
+  )
+)
+
+stopifnot(
+  all(copy_results_m18_mo),
+  file.exists(seadrive_mplus_data_file_m18_mo),
+  file.exists(seadrive_mplus_names_file_m18_mo),
+  file.exists(seadrive_mplus_names_text_file_m18_mo),
+  file.exists(seadrive_mplus_rds_file_m18_mo)
+)
+
+
+#-------------------------------------------------------------------------
+##### MERGE COMBINED CLASSES WITH ORIGINAL EXCEL DATASET #####
+#-------------------------------------------------------------------------
+
+dat_original <- read_excel(
+  master_excel_file
+)
+
+
+##### RECREATE ESTABLISHED SIC TO SIC_N LOOKUP #####
+
+id_lookup_mo <- dat_original |>
+  distinct(
+    sic
+  ) |>
+  arrange(
+    sic
+  ) |>
+  mutate(
+    SIC_N = row_number()
+  )
+
+stopifnot(
+  nrow(id_lookup_mo) == n_distinct(dat_original$sic),
+  anyDuplicated(id_lookup_mo$sic) == 0,
+  anyDuplicated(id_lookup_mo$SIC_N) == 0,
+  min(id_lookup_mo$SIC_N) == 1,
+  max(id_lookup_mo$SIC_N) == nrow(id_lookup_mo)
+)
+
+
+##### ADD ORIGINAL SIC TO COMBINED CLASSIFICATION #####
+
+combined_classes_original_id_mo <- combined_classes_mo |>
+  left_join(
+    id_lookup_mo,
+    by = "SIC_N"
+  )
+
+stopifnot(
+  nrow(combined_classes_original_id_mo) ==
+    nrow(combined_classes_mo),
+  
+  anyDuplicated(combined_classes_original_id_mo$SIC_N) == 0,
+  
+  !anyNA(combined_classes_original_id_mo$sic)
+)
+
+
+##### PREPARE EXCEL CLASS VARIABLES #####
+
+classes_excel_mo <- combined_classes_original_id_mo |>
+  select(
+    sic,
+    mt_class_mo,
+    mt_prob_class1_mo,
+    mt_prob_class2_mo,
+    mt_prob_class3_mo,
+    mt_prob_class4_mo,
+    mt_prob_max_mo,
+    mt_class_label_mo
+  )
+
+
+##### REMOVE OLD _MO VARIABLES IF CODE IS RERUN #####
+
+dat_original_m18_mo <- dat_original |>
+  select(
+    -any_of(
+      c(
+        "mt_class_mo",
+        "mt_prob_class1_mo",
+        "mt_prob_class2_mo",
+        "mt_prob_class3_mo",
+        "mt_prob_class4_mo",
+        "mt_prob_max_mo",
+        "mt_class_label_mo"
+      )
+    )
+  ) |>
+  left_join(
+    classes_excel_mo,
+    by = "sic"
+  )
+
+
+##### CHECK EXCEL MERGE #####
+
+stopifnot(
+  nrow(dat_original_m18_mo) == nrow(dat_original),
+  identical(
+    dat_original_m18_mo$sic,
+    dat_original$sic
+  ),
+  anyDuplicated(dat_original_m18_mo$sic) == 0,
+  
+  all(
+    c(
+      "mt_class_mo",
+      "mt_prob_class1_mo",
+      "mt_prob_class2_mo",
+      "mt_prob_class3_mo",
+      "mt_prob_class4_mo",
+      "mt_prob_max_mo",
+      "mt_class_label_mo"
+    ) %in% names(dat_original_m18_mo)
+  )
+)
+
+
+#-------------------------------------------------------------------------
+##### FINAL EXCEL-TO-SOURCE AUDIT #####
+#-------------------------------------------------------------------------
+
+excel_merge_audit_mo <- dat_original_m18_mo |>
+  select(
+    sic,
+    mt_class_mo,
+    mt_prob_class1_mo,
+    mt_prob_class2_mo,
+    mt_prob_class3_mo,
+    mt_prob_class4_mo,
+    mt_prob_max_mo,
+    mt_class_label_mo
+  ) |>
+  left_join(
+    classes_excel_mo |>
+      rename(
+        mt_class_mo_source = mt_class_mo,
+        mt_prob_class1_mo_source = mt_prob_class1_mo,
+        mt_prob_class2_mo_source = mt_prob_class2_mo,
+        mt_prob_class3_mo_source = mt_prob_class3_mo,
+        mt_prob_class4_mo_source = mt_prob_class4_mo,
+        mt_prob_max_mo_source = mt_prob_max_mo,
+        mt_class_label_mo_source = mt_class_label_mo
+      ),
+    by = "sic"
+  )
+
+
+##### CHECK NON-MISSING CLASSIFIED CASES #####
+
+excel_merge_audit_classified_mo <- excel_merge_audit_mo |>
+  filter(
+    !is.na(mt_class_mo)
+  )
+
+stopifnot(
+  all(
+    excel_merge_audit_classified_mo$mt_class_mo ==
+      excel_merge_audit_classified_mo$mt_class_mo_source
+  ),
+  
+  all(
+    abs(
+      excel_merge_audit_classified_mo$mt_prob_class1_mo -
+        excel_merge_audit_classified_mo$mt_prob_class1_mo_source
+    ) < 1e-10
+  ),
+  
+  all(
+    abs(
+      excel_merge_audit_classified_mo$mt_prob_class2_mo -
+        excel_merge_audit_classified_mo$mt_prob_class2_mo_source
+    ) < 1e-10
+  ),
+  
+  all(
+    abs(
+      excel_merge_audit_classified_mo$mt_prob_class3_mo -
+        excel_merge_audit_classified_mo$mt_prob_class3_mo_source
+    ) < 1e-10
+  ),
+  
+  all(
+    abs(
+      excel_merge_audit_classified_mo$mt_prob_class4_mo -
+        excel_merge_audit_classified_mo$mt_prob_class4_mo_source
+    ) < 1e-10
+  ),
+  
+  all(
+    abs(
+      excel_merge_audit_classified_mo$mt_prob_max_mo -
+        excel_merge_audit_classified_mo$mt_prob_max_mo_source
+    ) < 1e-10
+  ),
+  
+  all(
+    excel_merge_audit_classified_mo$mt_class_label_mo ==
+      excel_merge_audit_classified_mo$mt_class_label_mo_source
+  )
+)
+
+cat(
+  "\nExcel merge audit passed.\n"
+)
+
+
+#-------------------------------------------------------------------------
+##### SAVE NEW _MO EXCEL DATASET #####
+#-------------------------------------------------------------------------
+
+writexl::write_xlsx(
+  x = dat_original_m18_mo,
+  path = excel_file_m18_mo
+)
+
+stopifnot(
+  file.exists(excel_file_m18_mo)
+)
+
+
+#-------------------------------------------------------------------------
+##### FINAL SUMMARY #####
+#-------------------------------------------------------------------------
+
+cat(
+  "\n============================================================",
+  "\nM18B MALTREATED-ONLY PLUS NON-MALTREATED MERGE COMPLETED",
+  "\n============================================================",
+  "\n",
+  "\nCombined classes:",
+  "\n"
+)
+
+print(
+  combined_class_distribution_mo,
+  n = Inf
+)
+
+cat(
+  "\nLocal Mplus dataset:",
+  "\n", mplus_data_file_m18_mo,
+  "\n",
+  "\nLocal Mplus names file:",
+  "\n", mplus_names_file_m18_mo,
+  "\n",
+  "\nSeaDrive Mplus dataset:",
+  "\n", seadrive_mplus_data_file_m18_mo,
+  "\n",
+  "\nExcel dataset:",
+  "\n", excel_file_m18_mo,
+  "\n",
+  sep = ""
+)
+
+
+
 #-------------------------------------------------------------------------
 ##### PLOT M18 THREE-CLASS BURDEN TRAJECTORIES #####
 #-------------------------------------------------------------------------
@@ -3004,6 +4444,284 @@ cat(
 )
 
 
+
+#-------------------------------------------------------------------------
+##### PLOT M18B MALTREATED-ONLY TRAJECTORIES
+##### PLOT M18B INCLUDING NON-MALTREATED REFERENCE GROUP #####
+#-------------------------------------------------------------------------
+
+##### DEFINE M18B CLASS-SPECIFIC GROWTH MEANS ####
+
+m18b_growth_means_mo <- tibble(
+  class = c(
+    "Moderate/increasing burden (73.6%)",
+    "Elevated/declining burden (13.9%)",
+    "High/rebound burden (12.5%)"
+  ),
+  bur_i = c(
+    1.057,
+    2.188,
+    3.003
+  ),
+  bur_s = c(
+    0.328,
+    -0.440,
+    -0.499
+  ),
+  bur_q = c(
+    -0.132,
+    0.112,
+    0.379
+  )
+)
+
+
+##### DEFINE DEVELOPMENTAL PERIOD TABLE ####
+
+developmental_period_table_mo <- tibble(
+  period = toupper(
+    names(
+      developmental_midpoints
+    )
+  ),
+  midpoint_age = as.numeric(
+    developmental_midpoints
+  ),
+  time_score = as.numeric(
+    developmental_time_scores
+  )
+)
+
+
+##### CREATE MODEL-ESTIMATED TRAJECTORY DATA ####
+
+m18b_plot_data_mo <- merge(
+  m18b_growth_means_mo,
+  developmental_period_table_mo,
+  by = NULL
+) |>
+  as_tibble() |>
+  mutate(
+    estimated_burden = bur_i +
+      bur_s * time_score +
+      bur_q * time_score^2,
+    class = factor(
+      class,
+      levels = m18b_growth_means_mo$class
+    )
+  ) |>
+  arrange(
+    class,
+    midpoint_age
+  )
+
+
+##### CALCULATE OBSERVED PERIOD-SPECIFIC MEANS FOR NON-MALTREATED GROUP ####
+
+non_maltreated_plot_data_mo <- dat_mplus |>
+  filter(
+    !is.na(mal_all),
+    mal_all == 0
+  ) |>
+  select(
+    all_of(burden_variables_mo)
+  ) |>
+  pivot_longer(
+    cols = everything(),
+    names_to = "burden_variable",
+    values_to = "burden"
+  ) |>
+  group_by(
+    burden_variable
+  ) |>
+  summarise(
+    estimated_burden = mean(
+      burden,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  ) |>
+  mutate(
+    period = toupper(
+      sub(
+        "^zind_",
+        "",
+        burden_variable
+      )
+    )
+  ) |>
+  left_join(
+    developmental_period_table_mo,
+    by = "period"
+  ) |>
+  mutate(
+    class = non_maltreated_label_mo
+  ) |>
+  select(
+    class,
+    period,
+    midpoint_age,
+    time_score,
+    estimated_burden
+  ) |>
+  arrange(
+    midpoint_age
+  )
+
+
+##### COMBINE NON-MALTREATED AND M18B TRAJECTORIES ####
+
+class_levels_mo <- c(
+  non_maltreated_label_mo,
+  m18b_growth_means_mo$class
+)
+
+m18b_plot_data_with_nm_mo <- bind_rows(
+  non_maltreated_plot_data_mo,
+  m18b_plot_data_mo |>
+    select(
+      class,
+      period,
+      midpoint_age,
+      time_score,
+      estimated_burden
+    )
+) |>
+  mutate(
+    class = factor(
+      class,
+      levels = class_levels_mo
+    )
+  ) |>
+  arrange(
+    class,
+    midpoint_age
+  )
+
+
+##### INSPECT PLOTTED VALUES ####
+
+m18b_plot_data_with_nm_mo |>
+  select(
+    class,
+    period,
+    midpoint_age,
+    estimated_burden
+  ) |>
+  print(
+    n = Inf
+  )
+
+
+##### CREATE TRAJECTORY PLOT ####
+
+m18b_trajectory_plot_mo <- ggplot(
+  m18b_plot_data_with_nm_mo,
+  aes(
+    x = midpoint_age,
+    y = estimated_burden,
+    color = class,
+    group = class
+  )
+) +
+  geom_hline(
+    yintercept = 0,
+    linetype = "dashed",
+    color = "grey60",
+    linewidth = 0.5
+  ) +
+  geom_line(
+    linewidth = 1.2,
+    na.rm = TRUE
+  ) +
+  geom_point(
+    size = 2.8,
+    na.rm = TRUE
+  ) +
+  scale_x_continuous(
+    breaks = developmental_period_table_mo$midpoint_age,
+    labels = developmental_period_table_mo$period
+  ) +
+  scale_color_manual(
+    values = c(
+      "#666666",
+      "#3366A3",
+      "#D68C2F",
+      "#A33A3A"
+    )
+  ) +
+  labs(
+    x = "Developmental period",
+    y = "Standardised maltreatment burden",
+    color = NULL,
+    caption = stringr::str_wrap(
+      paste0(
+        "Note. Maltreatment burden was based on period-specific standardised ",
+        "indicators of subtype count, frequency, and severity. Values below zero ",
+        "indicate burden below the standardisation-sample mean and do not represent ",
+        "negative maltreatment exposure. Trajectories for the maltreated classes ",
+        "are model-estimated. The non-maltreated group was not included in the ",
+        "latent trajectory-class estimation and is displayed using observed ",
+        "period-specific mean burden scores."
+      ),
+      width = 200
+    ))+
+  theme_classic(
+    base_size = 12
+  ) +
+  theme(
+    legend.position = "bottom",
+    legend.text = element_text(
+      size = 10
+    ),
+    axis.text.x = element_text(
+      angle = 0,
+      hjust = 0.5
+    ),
+    plot.caption = element_text(
+      hjust = 0,
+      size = 8.5,
+      lineheight = 1.1,
+      margin = margin(
+        t = 10
+      )
+    ),
+    plot.margin = margin(
+      t = 10,
+      r = 10,
+      b = 10,
+      l = 10
+    )
+  )
+
+
+##### DISPLAY TRAJECTORY PLOT ####
+
+m18b_trajectory_plot_mo
+
+
+##### SAVE TRAJECTORY PLOT ####
+
+m18b_plot_file_mo <- file.path(
+  mplus_results_dir_mal,
+  "18b_mt_burden_quadratic_3class_trajectories_with_nonmaltreated_mo.png"
+)
+
+ggsave(
+  filename = m18b_plot_file_mo,
+  plot = m18b_trajectory_plot_mo,
+  width = 8,
+  height = 6,
+  units = "in",
+  dpi = 300
+)
+
+cat(
+  "Saved: ",
+  m18b_plot_file_mo,
+  "\n",
+  sep = ""
+)
 #-------------------------------------------------------------------------
 ##### TABLE S9: PRELIMINARY GROWTH MODELS #####
 #-------------------------------------------------------------------------

@@ -9,47 +9,30 @@ options(
 
 
 #-----------------------------------------------------------------------
-##### PACKAGE MANAGEMENT #####
+##### PACKAGES #####
 #-----------------------------------------------------------------------
-
-##### PACKAGES REQUIRED FOR ALMOST ALL SCRIPTS #####
 
 core_packages <- c(
   "tidyverse",
   "readxl",
-  "writexl"
+  "writexl",
+  "openxlsx"
 )
 
-
-##### PACKAGES USED IN SPECIFIC PROJECT SCRIPTS #####
-
-mplus_packages <- c(
+optional_packages <- c(
   "MplusAutomation",
-  "broom"
-)
-
-reporting_packages <- c(
   "officer",
-  "flextable"
+  "flextable",
+  "broom",
+  "here",
+  "ggrepel"
 )
-
-project_utility_packages <- c(
-  "here"
-)
-
-# Used only in an older alternative R-based LCS syntax.
-legacy_packages <- c(
-  "lavaan"
-)
-
-
-##### CHECK PACKAGES #####
 
 check_packages <- function(
     packages,
     required = TRUE
 ) {
-  
+
   missing_packages <- packages[
     !vapply(
       packages,
@@ -58,45 +41,25 @@ check_packages <- function(
       FUN.VALUE = logical(1)
     )
   ]
-  
-  if (
-    required &&
-    length(missing_packages) > 0
-  ) {
+
+  if (required && length(missing_packages) > 0) {
     stop(
-      "The following required packages are missing: ",
-      paste(
-        missing_packages,
-        collapse = ", "
-      )
+      "Missing required packages: ",
+      paste(missing_packages, collapse = ", ")
     )
   }
-  
-  if (
-    !required &&
-    length(missing_packages) > 0
-  ) {
+
+  if (!required && length(missing_packages) > 0) {
     message(
       "Optional packages not installed: ",
-      paste(
-        missing_packages,
-        collapse = ", "
-      )
+      paste(missing_packages, collapse = ", ")
     )
   }
-  
-  invisible(
-    missing_packages
-  )
+
+  invisible(missing_packages)
 }
 
-
-##### LOAD CORE PACKAGES #####
-
-check_packages(
-  core_packages,
-  required = TRUE
-)
+check_packages(core_packages, required = TRUE)
 
 invisible(
   lapply(
@@ -106,33 +69,23 @@ invisible(
   )
 )
 
-
-##### CHECK OPTIONAL PROJECT PACKAGES #####
-
-check_packages(
-  c(
-    mplus_packages,
-    reporting_packages,
-    project_utility_packages
-  ),
+missing_optional_packages <- check_packages(
+  optional_packages,
   required = FALSE
 )
 
-check_packages(
-  legacy_packages,
-  required = FALSE
+available_optional_packages <- setdiff(
+  optional_packages,
+  missing_optional_packages
 )
 
-
-# Use namespace-qualified calls in the analysis scripts:
-#
-# MplusAutomation::readModels()
-# broom::tidy()
-# officer::read_docx()
-# flextable::flextable()
-#
-# This avoids masking functions from tidyverse/readxl.
-
+invisible(
+  lapply(
+    available_optional_packages,
+    library,
+    character.only = TRUE
+  )
+)
 
 #-----------------------------------------------------------------------
 ##### ROOT PATHS #####
@@ -184,23 +137,15 @@ results_dir <- file.path(
 ##### MASTER DATA FILES #####
 #-----------------------------------------------------------------------
 
-##### ORIGINAL MERGED ANALYSIS DATASET #####
-
 master_excel_file <- file.path(
   data_prep_dir,
   "AMIS_merged_analysis_dataset.xlsx"
 )
 
-
-##### DATASET WITH M18 CLASS ASSIGNMENTS #####
-
 m18_excel_file <- file.path(
   data_prep_dir,
   "AMIS_merged_analysis_dataset_with_M18_classes.xlsx"
 )
-
-
-##### PREPARED R DATA FILES #####
 
 mplus_dataset_rds_file <- file.path(
   data_prep_dir,
@@ -224,16 +169,13 @@ merged_lcs_file <- file.path(
 
 
 #-----------------------------------------------------------------------
-##### MPLUS DATA DIRECTORY #####
+##### MPLUS DATA FILES #####
 #-----------------------------------------------------------------------
 
 seadrive_mplus_data_dir <- file.path(
   data_prep_dir,
   "MPlus_Dataset"
 )
-
-
-##### STANDARD MPLUS DATA FILES ON SEADRIVE #####
 
 seadrive_mplus_data_file <- file.path(
   seadrive_mplus_data_dir,
@@ -245,9 +187,6 @@ seadrive_mplus_names_file <- file.path(
   "AMIS_mplus_names.rds"
 )
 
-
-##### M18 MPLUS DATA FILES ON SEADRIVE #####
-
 seadrive_mplus_data_file_m18 <- file.path(
   seadrive_mplus_data_dir,
   "AMIS_mplus_dataset_m18.dat"
@@ -258,20 +197,8 @@ seadrive_mplus_names_file_m18 <- file.path(
   "AMIS_mplus_names_m18.rds"
 )
 
-
-# Retain shorter aliases used in existing scripts.
-mplus_names_file <- seadrive_mplus_names_file
-mplus_names_file_m18 <- seadrive_mplus_names_file_m18
-
-
-#-----------------------------------------------------------------------
-##### LOCAL MPLUS DIRECTORY #####
-#-----------------------------------------------------------------------
-
 mplus_input_dir <- "C:/MPLUS/Inputs"
-
-
-##### STANDARD LOCAL MPLUS DATA FILES #####
+mplus_archive_root <- "C:/MPLUS/Archive"
 
 mplus_data_file <- file.path(
   mplus_input_dir,
@@ -283,9 +210,6 @@ mplus_names_file_local <- file.path(
   "AMIS_mplus_names.rds"
 )
 
-
-##### LOCAL M18 MPLUS DATA FILES #####
-
 mplus_data_file_m18 <- file.path(
   mplus_input_dir,
   "AMIS_mplus_dataset_m18.dat"
@@ -296,24 +220,29 @@ mplus_names_file_m18_local <- file.path(
   "AMIS_mplus_names_m18.rds"
 )
 
-
-##### FINAL M18 MODEL FILES #####
-
-m18_input_file <- file.path(
+mplus_names_text_file_m18_local <- file.path(
   mplus_input_dir,
-  "18_mt_burden_quadratic_3class.inp"
+  "AMIS_mplus_names_m18.txt"
 )
 
-m18_output_file <- file.path(
+mplus_rds_file_m18_local <- file.path(
   mplus_input_dir,
-  "18_mt_burden_quadratic_3class.out"
+  "AMIS_mplus_dataset_m18.rds"
 )
 
-m18_cprob_file <- file.path(
-  mplus_input_dir,
-  "18_mt_burden_quadratic_3class_cprob.dat"
+mplus_variable_dictionary_file <- file.path(
+  github_root,
+  "mplus_variable_dictionary.csv"
 )
 
+#-------------------------------------------------------------------------
+##### MASTER VARIABLE DICTIONARY #####
+#-------------------------------------------------------------------------
+
+master_dictionary_file <- file.path(
+  github_root,
+  "mplus_variable_dictionary_master.csv"
+)
 
 #-----------------------------------------------------------------------
 ##### MPLUS RESULTS DIRECTORIES #####
@@ -349,15 +278,16 @@ mplus_results_dir_biology <- file.path(
   "05_biology"
 )
 
-
-# Compatibility aliases for older scripts.
+# Compatibility aliases used in older scripts.
 mplus_results_dir_mal <- mplus_results_dir_maltreatment
 mplus_results_dir_bio <- mplus_results_dir_biology
+mplus_output_dir <- mplus_input_dir
 invariance_results_dir <- mplus_results_dir_invariance
+lcs_results_dir <- mplus_results_dir_lcs
 
 
 #-----------------------------------------------------------------------
-##### M18 CLASS AND LCS RESULTS #####
+##### M18 RESULTS #####
 #-----------------------------------------------------------------------
 
 m18_class_checks_dir <- file.path(
@@ -370,9 +300,6 @@ m18_lcs_results_dir <- file.path(
   "02_classes_predicting_change"
 )
 
-
-##### CLASS-DESCRIPTION OUTPUT FILES #####
-
 m18_class_checks_file <- file.path(
   m18_class_checks_dir,
   "M18_class_description.xlsx"
@@ -381,26 +308,6 @@ m18_class_checks_file <- file.path(
 m18_word_file <- file.path(
   m18_class_checks_dir,
   "M18_class_characteristics_APA.docx"
-)
-
-
-#-----------------------------------------------------------------------
-##### MEASUREMENT-INVARIANCE OUTPUT FILES #####
-#-----------------------------------------------------------------------
-
-invariance_fit_file <- file.path(
-  mplus_results_dir_invariance,
-  "SDQ_measurement_invariance_fit_indices.csv"
-)
-
-invariance_table_csv_file <- file.path(
-  mplus_results_dir_invariance,
-  "Table_SDQ_measurement_invariance.csv"
-)
-
-invariance_table_word_file <- file.path(
-  mplus_results_dir_invariance,
-  "Table_SDQ_measurement_invariance.docx"
 )
 
 
@@ -438,9 +345,6 @@ github_biology_dir <- file.path(
   "05_biology"
 )
 
-
-##### SPECIFIC GITHUB ANALYSIS DIRECTORIES #####
-
 github_m18_class_dir <- file.path(
   github_maltreatment_dir,
   "01_class_description"
@@ -452,77 +356,29 @@ github_m18_lcs_dir <- file.path(
 )
 
 
-##### VARIABLE DICTIONARY #####
-
-mplus_variable_dictionary_file <- file.path(
-  github_root,
-  "mplus_variable_dictionary.csv"
-)
-
-
 #-----------------------------------------------------------------------
-##### DYNAMIC SES SOURCE FILES #####
-#-----------------------------------------------------------------------
-
-# Add the final file first once it becomes available.
-ses_source_candidates <- c(
-  file.path(
-    data_prep_dir,
-    "SES_source_data_final.xlsx"
-  ),
-  file.path(
-    data_prep_dir,
-    "SES_source_data_proxy.xlsx"
-  )
-)
-
-
-# Preferred variable first, temporary proxy variables afterwards.
-covariate_candidates <- list(
-  
-  caregiver_education = c(
-    "FINAL_CAREGIVER_EDUCATION_VARIABLE",
-    "PROXY_CAREGIVER_EDUCATION_VARIABLE"
-  ),
-  
-  age_t2 = c(
-    "mt_age_t2"
-  ),
-  
-  sex = c(
-    "sdq_sex"
-  )
-)
-
-
-#-----------------------------------------------------------------------
-##### CREATE PROJECT DIRECTORIES #####
+##### CREATE DIRECTORIES #####
 #-----------------------------------------------------------------------
 
 project_directories <- c(
   github_r_dir,
-  
   data_prep_dir,
   seadrive_mplus_data_dir,
-  
   mplus_input_dir,
-  
+  mplus_archive_root,
   mplus_results_dir_measurement,
   mplus_results_dir_invariance,
   mplus_results_dir_lcs,
   mplus_results_dir_maltreatment,
   mplus_results_dir_biology,
-  
   m18_class_checks_dir,
   m18_lcs_results_dir,
-  
   github_mplus_dir,
   github_measurement_dir,
   github_invariance_dir,
   github_lcs_dir,
   github_maltreatment_dir,
   github_biology_dir,
-  
   github_m18_class_dir,
   github_m18_lcs_dir
 )
@@ -530,7 +386,7 @@ project_directories <- c(
 walk(
   unique(project_directories),
   ~ dir.create(
-    path = .x,
+    .x,
     recursive = TRUE,
     showWarnings = FALSE
   )
@@ -538,16 +394,14 @@ walk(
 
 
 #-----------------------------------------------------------------------
-##### GENERAL HELPER FUNCTIONS #####
+##### HELPER FUNCTIONS #####
 #-----------------------------------------------------------------------
-
-##### CHECK THAT A FILE EXISTS #####
 
 assert_file_exists <- function(
     path,
     label = "File"
 ) {
-  
+
   if (
     length(path) != 1 ||
     is.na(path) ||
@@ -559,242 +413,211 @@ assert_file_exists <- function(
       path
     )
   }
-  
-  invisible(
-    normalizePath(
-      path,
-      winslash = "/",
-      mustWork = TRUE
-    )
-  )
+
+  invisible(path)
 }
-
-
-##### SELECT FIRST EXISTING FILE #####
-
-first_existing_file <- function(
-    candidates,
-    label = "Input file",
-    required = TRUE
-) {
-  
-  existing_files <- candidates[
-    file.exists(candidates)
-  ]
-  
-  if (length(existing_files) == 0) {
-    
-    if (required) {
-      stop(
-        label,
-        " not found. Checked:\n",
-        paste(
-          candidates,
-          collapse = "\n"
-        )
-      )
-    }
-    
-    message(
-      label,
-      " is not available yet."
-    )
-    
-    return(
-      NA_character_
-    )
-  }
-  
-  selected_file <- existing_files[1]
-  
-  message(
-    label,
-    ": using ",
-    selected_file
-  )
-  
-  selected_file
-}
-
-
-##### SELECT FIRST EXISTING VARIABLE #####
-
-first_existing_variable <- function(
-    data,
-    candidates,
-    label = "Variable",
-    required = TRUE
-) {
-  
-  available_variables <- candidates[
-    candidates %in% names(data)
-  ]
-  
-  if (length(available_variables) == 0) {
-    
-    if (required) {
-      stop(
-        label,
-        " not found. Checked: ",
-        paste(
-          candidates,
-          collapse = ", "
-        )
-      )
-    }
-    
-    message(
-      label,
-      " is not available yet."
-    )
-    
-    return(
-      NA_character_
-    )
-  }
-  
-  selected_variable <- available_variables[1]
-  
-  message(
-    label,
-    ": using ",
-    selected_variable
-  )
-  
-  selected_variable
-}
-
-
-##### CHECK UNIQUE IDENTIFIER #####
-
-check_unique_id <- function(
-    data,
-    id = "sic",
-    data_label = "Dataset"
-) {
-  
-  if (!id %in% names(data)) {
-    stop(
-      id,
-      " is missing from ",
-      data_label,
-      "."
-    )
-  }
-  
-  if (anyNA(data[[id]])) {
-    stop(
-      "Missing ",
-      id,
-      " values found in ",
-      data_label,
-      "."
-    )
-  }
-  
-  if (anyDuplicated(data[[id]]) > 0) {
-    stop(
-      "Duplicated ",
-      id,
-      " values found in ",
-      data_label,
-      "."
-    )
-  }
-  
-  invisible(TRUE)
-}
-
-
-##### CREATE MPLUS NAMES SYNTAX #####
 
 wrap_mplus_names <- function(
     variable_names,
     max_width = 88,
     indent = "    "
 ) {
-  
+
   output_lines <- character()
   current_line <- indent
-  
+
   for (variable_name in variable_names) {
-    
+
     proposed_line <- paste(
       current_line,
       variable_name
     )
-    
+
     if (nchar(proposed_line) > max_width) {
-      
       output_lines <- c(
         output_lines,
         current_line
       )
-      
       current_line <- paste0(
         indent,
         variable_name
       )
-      
     } else {
-      
       current_line <- proposed_line
     }
   }
-  
+
   c(
     output_lines,
     current_line
   )
 }
 
+copy_file_checked <- function(
+    source_file,
+    target,
+    overwrite = TRUE
+) {
 
-##### COPY A FILE TO THE LOCAL MPLUS DIRECTORY #####
+  assert_file_exists(
+    source_file,
+    "Source file"
+  )
+
+  target_dir <- if (dir.exists(target)) {
+    target
+  } else {
+    dirname(target)
+  }
+
+  dir.create(
+    target_dir,
+    recursive = TRUE,
+    showWarnings = FALSE
+  )
+
+  copied <- file.copy(
+    from = source_file,
+    to = target,
+    overwrite = overwrite
+  )
+
+  if (!copied) {
+    stop(
+      "Could not copy file to:\n",
+      target
+    )
+  }
+
+  invisible(target)
+}
 
 copy_to_mplus <- function(
     source_file,
     overwrite = TRUE
 ) {
-  
-  assert_file_exists(
-    source_file,
-    "Mplus source file"
-  )
-  
+
   target_file <- file.path(
     mplus_input_dir,
     basename(source_file)
   )
-  
-  copied <- file.copy(
-    from = source_file,
-    to = target_file,
+
+  copy_file_checked(
+    source_file = source_file,
+    target = target_file,
     overwrite = overwrite
   )
-  
-  if (!copied) {
-    stop(
-      "Could not copy file to:\n",
-      target_file
-    )
-  }
-  
+
   target_file
 }
 
-
-#-----------------------------------------------------------------------
-##### PROJECT INFORMATION #####
-#-----------------------------------------------------------------------
-
 cat(
-  "\nMAIN OUTCOME setup loaded.",
-  "\nGitHub root: ",
-  github_root,
-  "\nSeadrive root: ",
-  main_outcome_dir,
-  "\nMplus input directory: ",
-  mplus_input_dir,
-  "\n\n",
+  "\nMAIN OUTCOME setup loaded.\n",
+  "GitHub root: ", github_root, "\n",
+  "SeaDrive root: ", main_outcome_dir, "\n",
+  "Mplus input directory: ", mplus_input_dir, "\n\n",
   sep = ""
 )
+
+create_dictionary_part <- function(
+    data,
+    mplus_names,
+    excel_file,
+    mplus_file
+) {
+  
+  stopifnot(
+    length(mplus_names) <= ncol(data)
+  )
+  
+  tibble::tibble(
+    dataset_excel = basename(excel_file),
+    dataset_mplus = basename(mplus_file),
+    original_name = names(data)[seq_along(mplus_names)],
+    mplus_name = mplus_names,
+    position_excel = seq_along(mplus_names),
+    position_mplus = seq_along(mplus_names),
+    retained = TRUE
+  )
+}
+
+m18_dictionary_file <- file.path(
+  github_root,
+  "mplus_variable_dictionary_m18.csv"
+)
+
+master_dictionary_file <- file.path(
+  github_root,
+  "mplus_variable_dictionary_master.csv"
+)
+
+
+##### FORMAT CONFIDENCE INTERVALS #####
+
+format_confidence_interval <- function(
+    lower,
+    upper,
+    digits = 3
+) {
+  
+  result <- rep(
+    "—",
+    length(lower)
+  )
+  
+  available <- !is.na(lower) &
+    !is.na(upper)
+  
+  result[available] <- paste0(
+    "[",
+    formatC(
+      lower[available],
+      format = "f",
+      digits = digits
+    ),
+    ", ",
+    formatC(
+      upper[available],
+      format = "f",
+      digits = digits
+    ),
+    "]"
+  )
+  
+  result
+}
+
+
+##### FORMAT P VALUES #####
+
+format_p_value <- function(
+    p,
+    digits = 3
+) {
+  
+  result <- rep(
+    "—",
+    length(p)
+  )
+  
+  available <- !is.na(p)
+  
+  result[
+    available & p < .001
+  ] <- "< .001"
+  
+  regular <- available &
+    p >= .001
+  
+  result[regular] <- sub(
+    "^0",
+    "",
+    formatC(
+      p[regular],
+      format = "f",
+      digits = digits
+    )
+  )
+  
+  result
+}
