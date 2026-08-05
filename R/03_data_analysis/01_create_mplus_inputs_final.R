@@ -2342,6 +2342,16 @@ joint_usevariables_syntax <- paste(
 
 ##### CREATE M15 INPUT SYNTAX ####
 
+mplus_data_name <- basename(
+  mplus_data_file
+)
+
+stopifnot(
+  file.exists(mplus_data_file),
+  length(mplus_data_name) == 1,
+  nzchar(mplus_data_name)
+)
+
 input_syntax_m15 <- paste0(
   "TITLE:\n",
   "  M15: Joint one-class quadratic parallel-process ",
@@ -2495,6 +2505,113 @@ message(
   "Created: ",
   input_file_m15
 )
+
+##### RUN M15 #####
+
+
+m15_output_file <- paste0(
+  tools::file_path_sans_ext(
+    input_file_m15
+  ),
+  ".out"
+)
+
+previous_output_mtime <- if (
+  file.exists(
+    m15_output_file
+  )
+) {
+  file.info(
+    m15_output_file
+  )$mtime
+} else {
+  as.POSIXct(
+    NA
+  )
+}
+
+if (isTRUE(run_mplus_models)) {
+  
+  if (
+    MplusAutomation::mplusAvailable(
+      silent = FALSE
+    ) != 0
+  ) {
+    stop(
+      "Mplus could not be detected by MplusAutomation."
+    )
+  }
+  
+  message(
+    "Running M15: ",
+    basename(
+      input_file_m15
+    )
+  )
+  
+  MplusAutomation::runModels(
+    target = input_file_m15,
+    replaceOutfile = "always",
+    showOutput = TRUE,
+    logFile = NULL,
+    quiet = FALSE
+  )
+  
+  if (!file.exists(m15_output_file)) {
+    stop(
+      "M15 did not create the expected output:\n",
+      m15_output_file
+    )
+  }
+  
+  current_output_mtime <- file.info(
+    m15_output_file
+  )$mtime
+  
+  if (
+    !is.na(previous_output_mtime) &&
+    current_output_mtime <= previous_output_mtime
+  ) {
+    stop(
+      "The existing M15 output was not updated:\n",
+      m15_output_file
+    )
+  }
+  
+  m15_output_text <- readLines(
+    m15_output_file,
+    warn = FALSE
+  )
+  
+  if (
+    !any(
+      grepl(
+        "THE MODEL ESTIMATION TERMINATED NORMALLY",
+        m15_output_text,
+        fixed = TRUE
+      )
+    )
+  ) {
+    stop(
+      "M15 created an output file but did not terminate normally:\n",
+      m15_output_file
+    )
+  }
+  
+  message(
+    "M15 completed successfully; output updated at ",
+    format(
+      current_output_mtime,
+      "%Y-%m-%d %H:%M:%S"
+    )
+  )
+  
+} else {
+  
+  message(
+    "M15 input was created, but Mplus execution was skipped."
+  )
+}
 
 #-------------------------------------------------------------------------
 ##### SYNCHRONIZE AND ARCHIVE COMPLETED MPLUS MODELS #########
