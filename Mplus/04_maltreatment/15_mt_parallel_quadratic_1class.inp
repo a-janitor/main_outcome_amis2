@@ -1,12 +1,12 @@
 TITLE:
-  M15: Joint quadratic parallel-process growth model for maltreatment;
+  M15: Joint one-class quadratic parallel-process growth model for maltreatment;
 
 DATA:
   FILE = AMIS_mplus_dataset.dat;
 
 VARIABLE:
   NAMES ARE
-     has_sdq has_mt has_cg has_diag diag_vor int_vor ext_vor int_ext aff_vor anx_vor
+    has_sdq has_mt has_cg has_diag diag_vor int_vor ext_vor int_ext aff_vor anx_vor
     psy_vor vh_vor adhs_vor weit_vor abh_vor ess_vor tic_vor enur_vor enk_vor anp_vor
     ptbs_vor bipo_vor md_vor dys_vor pan_vor gad_vor ago_vor soz_vor phob_vor zwa_vor
     trn_vor cd_vor odd_vor dnos_vor bind_vor mut_vor sext5 age_b2 age_k2 age_p2 age_t2
@@ -52,8 +52,10 @@ VARIABLE:
     prs_mau PC1 PC2 PC3 PC4 stat_t5 aget2 aget5m SIC_N;
 
   USEVARIABLES ARE
-     z5_sa z5_kk z5_vsa z5_fsz z5_ssz z5_ja z5_jea zfq_sa zfq_kk zfq_vsa zfq_fsz zfq_ssz
+    z5_sa z5_kk z5_vsa z5_fsz z5_ssz z5_ja z5_jea zfq_sa zfq_kk zfq_vsa zfq_fsz zfq_ssz
     zfq_ja zfq_jea zsv_sa zsv_kk zsv_vsa zsv_fsz zsv_ssz zsv_ja zsv_jea;
+
+  USEOBSERVATIONS ARE mal_all EQ 1;
 
   MISSING ARE ALL (-999);
   IDVARIABLE IS SIC_N;
@@ -63,35 +65,35 @@ ANALYSIS:
   ESTIMATOR = MLR;
 
 MODEL:
-  ! Quadratic growth process for number of subtypes
+  ! Quadratic growth process for maltreatment multiplicity
   sub_i sub_s sub_q |
-    z5_sa@-3.14173
-    z5_kk@-2.64173
-    z5_vsa@-1.808397
-    z5_fsz@-0.975063
-    z5_ssz@0.191603
-    z5_ja@1.85827
-    z5_jea@3.14173;
+    z5_sa@-3.133398
+    z5_kk@-2.633398
+    z5_vsa@-1.800065
+    z5_fsz@-0.966732
+    z5_ssz@0.199935
+    z5_ja@1.866602
+    z5_jea@3.133398;
 
-  ! Quadratic growth process for frequency
+  ! Quadratic growth process for maltreatment frequency
   fq_i fq_s fq_q |
-    zfq_sa@-3.14173
-    zfq_kk@-2.64173
-    zfq_vsa@-1.808397
-    zfq_fsz@-0.975063
-    zfq_ssz@0.191603
-    zfq_ja@1.85827
-    zfq_jea@3.14173;
+    zfq_sa@-3.133398
+    zfq_kk@-2.633398
+    zfq_vsa@-1.800065
+    zfq_fsz@-0.966732
+    zfq_ssz@0.199935
+    zfq_ja@1.866602
+    zfq_jea@3.133398;
 
-  ! Quadratic growth process for severity
+  ! Quadratic growth process for maltreatment severity
   sev_i sev_s sev_q |
-    zsv_sa@-3.14173
-    zsv_kk@-2.64173
-    zsv_vsa@-1.808397
-    zsv_fsz@-0.975063
-    zsv_ssz@0.191603
-    zsv_ja@1.85827
-    zsv_jea@3.14173;
+    zsv_sa@-3.133398
+    zsv_kk@-2.633398
+    zsv_vsa@-1.800065
+    zsv_fsz@-0.966732
+    zsv_ssz@0.199935
+    zsv_ja@1.866602
+    zsv_jea@3.133398;
 
   ! Growth-factor means
   [sub_i sub_s sub_q fq_i fq_s fq_q sev_i sev_s sev_q];
@@ -109,7 +111,7 @@ MODEL:
   sev_i WITH sev_s sev_q;
   sev_s WITH sev_q;
 
-  ! Within-period residual covariances
+  ! Residual covariances within developmental periods
   z5_sa WITH zfq_sa zsv_sa;
   zfq_sa WITH zsv_sa;
   z5_kk WITH zfq_kk zsv_kk;

@@ -1,11 +1,11 @@
 TITLE:
-  M11: One-class linear growth model for maltreatment severity;
+  M2: SDQ CONFIGURAL MODEL WITH LONGITUDINAL RESIDUAL CORRELATIONS;
 
 DATA:
   FILE = AMIS_mplus_dataset.dat;
 
 VARIABLE:
-  NAMES ARE
+  NAMES =
     has_sdq has_mt has_cg has_diag diag_vor int_vor ext_vor int_ext aff_vor anx_vor
     psy_vor vh_vor adhs_vor weit_vor abh_vor ess_vor tic_vor enur_vor enk_vor anp_vor
     ptbs_vor bipo_vor md_vor dys_vor pan_vor gad_vor ago_vor soz_vor phob_vor zwa_vor
@@ -49,38 +49,45 @@ VARIABLE:
     em_s2 mv_s2 mb_s2 bm_s2 mre_s2 mrbm_s2 km_sa sm_sa ea_sa en_sa em_sa mv_sa mb_sa
     bm_sa mre_sa mrbm_sa c2p1raw c2p2raw c2p3raw c2p1log c2p2log c2p3log c2p1_z c2p2_z
     c2p3_z c5_raw c5_log c5_z prs_e02 prs_e04 prs_e06 prs_eau prs_m02 prs_m04 prs_m06
-    prs_mau PC1 PC2 PC3 PC4 stat_t5 aget2 aget5m SIC_N;
+    prs_mau PC1 PC2 PC3 PC4 stat_t5 aget2 aget5m SIC_N
+    ;
 
-  USEVARIABLES ARE
-    zsv_sa zsv_kk zsv_vsa zsv_fsz zsv_ssz zsv_ja zsv_jea;
+  USEVARIABLES =
+    hyp_b2 hyp_k2 hyp_p2 hyp_b5 hyp_k5 hyp_p5
+    con_b2 con_k2 con_p2 con_b5 con_k5 con_p5
+    emo_b2 emo_k2 emo_p2 emo_b5 emo_k5 emo_p5;
 
-  MISSING ARE ALL (-999);
-  IDVARIABLE IS SIC_N;
-  USEOBSERVATIONS ARE mal_all EQ 1;
+  USEOBSERVATIONS = stat_t5 NE 0;
+  IDVARIABLE = SIC_N;
+  MISSING = ALL (-999);
 
 ANALYSIS:
-  TYPE = GENERAL;
   ESTIMATOR = MLR;
+  COVERAGE = 0.01;
 
 MODEL:
-  sev_i sev_s |
-    zsv_sa@-3.133398
-    zsv_kk@-2.633398
-    zsv_vsa@-1.800065
-    zsv_fsz@-0.966732
-    zsv_ssz@0.199935
-    zsv_ja@1.866602
-    zsv_jea@3.133398;
 
-  [sev_i sev_s];
-  sev_i sev_s;
-  sev_i WITH sev_s;
+  ! Configural CFA with correlated residuals of identical indicators over time
+
+  EXT2 BY hyp_b2@1 hyp_k2 hyp_p2 con_b2 con_k2 con_p2;
+  EXT5 BY hyp_b5@1 hyp_k5 hyp_p5 con_b5 con_k5 con_p5;
+  EMO2 BY emo_b2@1 emo_k2 emo_p2;
+  EMO5 BY emo_b5@1 emo_k5 emo_p5;
+
+  EXT2 WITH EMO2 EXT5 EMO5;
+  EXT5 WITH EMO2 EMO5;
+  EMO2 WITH EMO5;
+
+  hyp_b2 WITH hyp_b5;
+  hyp_k2 WITH hyp_k5;
+  hyp_p2 WITH hyp_p5;
+  con_b2 WITH con_b5;
+  con_k2 WITH con_k5;
+  con_p2 WITH con_p5;
+  emo_b2 WITH emo_b5;
+  emo_k2 WITH emo_k5;
+  emo_p2 WITH emo_p5;
 
 OUTPUT:
-  SAMPSTAT;
-  STANDARDIZED;
-  RESIDUAL;
-  CINTERVAL;
-  TECH1;
-  TECH4;
+  SAMPSTAT STANDARDIZED TECH1 TECH4 MODINDICES(10);
 

@@ -1,12 +1,12 @@
 TITLE:
-  M14: Quadratic growth model for maltreatment severity;
+  M14: One-class quadratic growth model for maltreatment severity;
 
 DATA:
   FILE = AMIS_mplus_dataset.dat;
 
 VARIABLE:
   NAMES ARE
-     has_sdq has_mt has_cg has_diag diag_vor int_vor ext_vor int_ext aff_vor anx_vor
+    has_sdq has_mt has_cg has_diag diag_vor int_vor ext_vor int_ext aff_vor anx_vor
     psy_vor vh_vor adhs_vor weit_vor abh_vor ess_vor tic_vor enur_vor enk_vor anp_vor
     ptbs_vor bipo_vor md_vor dys_vor pan_vor gad_vor ago_vor soz_vor phob_vor zwa_vor
     trn_vor cd_vor odd_vor dnos_vor bind_vor mut_vor sext5 age_b2 age_k2 age_p2 age_t2
@@ -52,10 +52,11 @@ VARIABLE:
     prs_mau PC1 PC2 PC3 PC4 stat_t5 aget2 aget5m SIC_N;
 
   USEVARIABLES ARE
-     zsv_sa zsv_kk zsv_vsa zsv_fsz zsv_ssz zsv_ja zsv_jea;
+    zsv_sa zsv_kk zsv_vsa zsv_fsz zsv_ssz zsv_ja zsv_jea;
 
   MISSING ARE ALL (-999);
   IDVARIABLE IS SIC_N;
+  USEOBSERVATIONS ARE mal_all EQ 1;
 
 ANALYSIS:
   TYPE = GENERAL;
@@ -63,13 +64,13 @@ ANALYSIS:
 
 MODEL:
   sev_i sev_s sev_q |
-    zsv_sa@-3.14173
-    zsv_kk@-2.64173
-    zsv_vsa@-1.808397
-    zsv_fsz@-0.975063
-    zsv_ssz@0.191603
-    zsv_ja@1.85827
-    zsv_jea@3.14173;
+    zsv_sa@-3.133398
+    zsv_kk@-2.633398
+    zsv_vsa@-1.800065
+    zsv_fsz@-0.966732
+    zsv_ssz@0.199935
+    zsv_ja@1.866602
+    zsv_jea@3.133398;
 
   [sev_i sev_s sev_q];
   sev_i sev_s sev_q;

@@ -1,168 +1,37 @@
 #-------------------------------------------------------------------------
 ##### SETUP #####
 #-------------------------------------------------------------------------
-##### LOAD PACKAGES ####
-install.packages(
-  c("officer", "flextable"),
-  dependencies = TRUE,
-  type = "binary"
-)
-library(MplusAutomation)
-library(dplyr)
-library(purrr)
-library(stringr)
-library(readr)
-library(flextable)
-library(officer)
 
-##### DEFINE MPLUS DIRECTORIES ####
-mplus_input_dir <- "C:/MPLUS/Inputs"
+source("C:/Users/keil/Documents/main_outcome_amis2/R/03_data_analysis/00_setup_standardized.R")
 
-mplus_results_dir_measurement <- paste0(
-  "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/",
-  "MAIN OUTCOME/03_results/Mplus/01_measurement"
-)
+check_packages(c("MplusAutomation", "officer", "flextable"))
 
-mplus_results_dir_invariance <- paste0(
-  "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/",
-  "MAIN OUTCOME/03_results/Mplus/02_invariance"
+##### COPY AND LOAD MPLUS DATA INFORMATION #####
+
+copy_to_mplus(seadrive_mplus_data_file)
+copy_to_mplus(seadrive_mplus_names_file)
+
+mplus_names  <- readRDS(mplus_names_file_local)
+mplus_fields <- count.fields(mplus_data_file, sep = "", blank.lines.skip = TRUE)
+
+stopifnot(
+  is.character(mplus_names),
+  length(mplus_names) > 0L,
+  !anyNA(mplus_names),
+  all(nchar(mplus_names) <= 8L),
+  all(grepl("^[A-Za-z][A-Za-z0-9_]*$", mplus_names)),
+  anyDuplicated(toupper(mplus_names)) == 0L,
+  length(mplus_fields) > 0L,
+  all(mplus_fields == length(mplus_names))
 )
 
-mplus_results_dir_lcs <- paste0(
-  "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/",
-  "MAIN OUTCOME/03_results/Mplus/03_lcs"
-)
-
-mplus_results_dir_mal <- paste0(
-  "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/",
-  "MAIN OUTCOME/03_results/Mplus/04_maltreatment"
-)
-
-mplus_results_dir_bio <- paste0(
-  "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/",
-  "MAIN OUTCOME/03_results/Mplus/05_biology"
-)
-
-##### DEFINE GITHUB MPLUS DIRECTORIES ####
-github_mplus_dir <- file.path(
-  "C:/Users/keil/Documents/main_outcome_amis2",
-  "Mplus"
-)
-
-github_measurement_dir <- file.path(
-  github_mplus_dir,
-  "01_measurement"
-)
-
-github_invariance_dir <- file.path(
-  github_mplus_dir,
-  "02_invariance"
-)
-
-github_lcs_dir <- file.path(
-  github_mplus_dir,
-  "03_lcs"
-)
-
-github_maltreatment_dir <- file.path(
-  github_mplus_dir,
-  "04_maltreatment"
-)
-
-github_maltreatment_dir <- file.path(
-  github_mplus_dir,
-  "05_biology"
-)
-
-
-invisible(
-  sapply(
-    c(
-      mplus_input_dir,
-      mplus_results_dir_measurement,
-      mplus_results_dir_invariance,
-      mplus_results_dir_lcs,
-      mplus_results_dir_mal,
-      mplus_results_dir_bio
-    ),
-    dir.create,
-    recursive = TRUE,
-    showWarnings = FALSE
-  )
-)
-
-##### COPY MPLUS DATASET TO INPUT DIRECTORY ####
-file.copy(
-  from = paste0(
-    "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/",
-    "MAIN OUTCOME/02_data/02_data_Prep/MPlus_Dataset/",
-    "AMIS_mplus_dataset.dat"
-  ),
-  to = file.path(
-    mplus_input_dir,
-    "AMIS_mplus_dataset.dat"
-  ),
-  overwrite = TRUE
-)
-
-##### WRAP MPLUS VARIABLE NAMES ####
-wrap_mplus_names <- function(
-    variable_names,
-    max_width = 88,
-    indent = "    "
-) {
-  
-  output_lines <- character()
-  current_line <- indent
-  
-  for (variable_name in variable_names) {
-    
-    proposed_line <- paste(
-      current_line,
-      variable_name
-    )
-    
-    if (nchar(proposed_line) > max_width) {
-      
-      output_lines <- c(
-        output_lines,
-        current_line
-      )
-      
-      current_line <- paste0(
-        indent,
-        variable_name
-      )
-      
-    } else {
-      
-      current_line <- proposed_line
-    }
-  }
-  
-  c(
-    output_lines,
-    current_line
-  )
-}
-
-##### CREATE MPLUS NAMES LIST ####
 names_syntax <- paste(
-  wrap_mplus_names(
-    names(dat_mplus),
-    max_width = 88
-  ),
+  wrap_mplus_names(mplus_names, max_width = 88),
   collapse = "\n"
 )
 
-##### CHECK MAXIMUM LINE LENGTH ####
-max(
-  nchar(
-    strsplit(
-      names_syntax,
-      "\n"
-    )[[1]]
-  )
+stopifnot(
+  all(nchar(strsplit(names_syntax, "\n", fixed = TRUE)[[1L]]) <= 88L)
 )
 
 #-------------------------------------------------------------------------
@@ -171,7 +40,7 @@ max(
 ##### CREATE M1_CONFIGURAL MODEL ####
 configural_input <- paste0(
   "TITLE:
-  SDQ CONFIGURAL MEASUREMENT MODEL T2-T5;
+  M1: SDQ CONFIGURAL MEASUREMENT MODEL T2-T5;
 
 DATA:
   FILE = AMIS_mplus_dataset.dat;
@@ -182,19 +51,12 @@ VARIABLE:
     ;
 
   USEVARIABLES =
-    hyp_b2 hyp_k2 hyp_p2
-    hyp_b5 hyp_k5 hyp_p5
-    con_b2 con_k2 con_p2
-    con_b5 con_k5 con_p5
-    emo_b2 emo_k2 emo_p2
-    emo_b5 emo_k5 emo_p5
-    ;
+    hyp_b2 hyp_k2 hyp_p2 hyp_b5 hyp_k5 hyp_p5
+    con_b2 con_k2 con_p2 con_b5 con_k5 con_p5
+    emo_b2 emo_k2 emo_p2 emo_b5 emo_k5 emo_p5;
 
-  USEOBSERVATIONS =
-    stat_t5 NE 0;
-
+  USEOBSERVATIONS = stat_t5 NE 0;
   IDVARIABLE = SIC_N;
-
   MISSING = ALL (-999);
 
 ANALYSIS:
@@ -203,74 +65,49 @@ ANALYSIS:
 
 MODEL:
 
-  ! Configural CFA without invariance constraints
-  ! or correlated indicator residuals
+  ! Configural CFA: freely estimated loadings and no residual correlations
 
-  EXT2 BY
-    hyp_b2@1
-    hyp_k2
-    hyp_p2
-    con_b2
-    con_k2
-    con_p2;
-
-  EXT5 BY
-    hyp_b5@1
-    hyp_k5
-    hyp_p5
-    con_b5
-    con_k5
-    con_p5;
-
-  EMO2 BY
-    emo_b2@1
-    emo_k2
-    emo_p2;
-
-  EMO5 BY
-    emo_b5@1
-    emo_k5
-    emo_p5;
-
-  ! Correlations among latent factors
+  EXT2 BY hyp_b2@1 hyp_k2 hyp_p2 con_b2 con_k2 con_p2;
+  EXT5 BY hyp_b5@1 hyp_k5 hyp_p5 con_b5 con_k5 con_p5;
+  EMO2 BY emo_b2@1 emo_k2 emo_p2;
+  EMO5 BY emo_b5@1 emo_k5 emo_p5;
 
   EXT2 WITH EMO2 EXT5 EMO5;
   EXT5 WITH EMO2 EMO5;
   EMO2 WITH EMO5;
 
 OUTPUT:
-  SAMPSTAT
-  STANDARDIZED
-  TECH1
-  TECH4
-  MODINDICES(10);
+  SAMPSTAT STANDARDIZED TECH1 TECH4 MODINDICES(10);
 "
 )
 
-##### SAVE MPLUS INPUT ####
-writeLines(
-  configural_input,
-  con = file.path(
-    mplus_input_dir,
-    "01_sdq_configural.inp"
+input_file <- write_mplus_input(
+  syntax     = configural_input,
+  filename   = "01_sdq_configural.inp",
+  github_dir = github_invariance_dir,
+  documentation = list(
+    model_id             = "M1",
+    model_name           = "Configural measurement model",
+    model_family         = "Measurement invariance",
+    script               = "01_create_mplus_inputs_invariance_lcs.R",
+    sample               = "stat_t5 NE 0",
+    estimator            = "MLR",
+    specification        = paste(
+      "Four correlated factors (EXT2, EXT5, EMO2, EMO5);",
+      "marker-variable scaling; remaining loadings freely estimated across time"
+    ),
+    residual_covariances = "None",
+    covariates           = "None",
+    model_role           = "Configural reference model",
+    notes                = ""
   )
 )
 
-##### COPY INPUT TO GITHUB PROJECT ####
-file.copy(
-  from = input_file,
-  to = paste0(
-    "C:/Users/keil/Documents/main_outcome_amis2/Mplus/02_invariance/01_sdq_configural.inp"
-  ),
-  overwrite = TRUE
-)
+##### CREATE M2_LONGITUDINAL RESIDUALS INPUT ####
 
-##### CREATE M2_OverTimeResiduals_Free INPUT ####
-
-residuals_free_input <- paste0(
+longitudinal_resid_input <- paste0(
   "TITLE:
-  SDQ MEASUREMENT MODEL T2-T5:
-  CORRELATED RESIDUALS OVER TIME;
+  M2: SDQ CONFIGURAL MODEL WITH LONGITUDINAL RESIDUAL CORRELATIONS;
 
 DATA:
   FILE = AMIS_mplus_dataset.dat;
@@ -281,19 +118,12 @@ VARIABLE:
     ;
 
   USEVARIABLES =
-    hyp_b2 hyp_k2 hyp_p2
-    hyp_b5 hyp_k5 hyp_p5
-    con_b2 con_k2 con_p2
-    con_b5 con_k5 con_p5
-    emo_b2 emo_k2 emo_p2
-    emo_b5 emo_k5 emo_p5
-    ;
+    hyp_b2 hyp_k2 hyp_p2 hyp_b5 hyp_k5 hyp_p5
+    con_b2 con_k2 con_p2 con_b5 con_k5 con_p5
+    emo_b2 emo_k2 emo_p2 emo_b5 emo_k5 emo_p5;
 
-  USEOBSERVATIONS =
-    stat_t5 NE 0;
-
+  USEOBSERVATIONS = stat_t5 NE 0;
   IDVARIABLE = SIC_N;
-
   MISSING = ALL (-999);
 
 ANALYSIS:
@@ -302,88 +132,59 @@ ANALYSIS:
 
 MODEL:
 
-  ! Configural measurement model
+  ! Configural CFA with correlated residuals of identical indicators over time
 
-  EXT2 BY
-    hyp_b2@1
-    hyp_k2
-    hyp_p2
-    con_b2
-    con_k2
-    con_p2;
-
-  EXT5 BY
-    hyp_b5@1
-    hyp_k5
-    hyp_p5
-    con_b5
-    con_k5
-    con_p5;
-
-  EMO2 BY
-    emo_b2@1
-    emo_k2
-    emo_p2;
-
-  EMO5 BY
-    emo_b5@1
-    emo_k5
-    emo_p5;
-
-  ! Correlations among latent factors
+  EXT2 BY hyp_b2@1 hyp_k2 hyp_p2 con_b2 con_k2 con_p2;
+  EXT5 BY hyp_b5@1 hyp_k5 hyp_p5 con_b5 con_k5 con_p5;
+  EMO2 BY emo_b2@1 emo_k2 emo_p2;
+  EMO5 BY emo_b5@1 emo_k5 emo_p5;
 
   EXT2 WITH EMO2 EXT5 EMO5;
   EXT5 WITH EMO2 EMO5;
   EMO2 WITH EMO5;
 
-  ! Correlated residuals of identical indicators over time
-
   hyp_b2 WITH hyp_b5;
   hyp_k2 WITH hyp_k5;
   hyp_p2 WITH hyp_p5;
-
   con_b2 WITH con_b5;
   con_k2 WITH con_k5;
   con_p2 WITH con_p5;
-
   emo_b2 WITH emo_b5;
   emo_k2 WITH emo_k5;
   emo_p2 WITH emo_p5;
 
 OUTPUT:
-  SAMPSTAT
-  STANDARDIZED
-  TECH1
-  TECH4
-  MODINDICES(10);
+  SAMPSTAT STANDARDIZED TECH1 TECH4 MODINDICES(10);
 "
 )
 
-##### SAVE M2 INPUT ####
-
-input_file <- file.path(
-  mplus_input_dir,
-  "02_sdq_residuals_free.inp"
-)
-
-writeLines(
-  residuals_free_input,
-  con = input_file
-)
-
-##### COPY INPUT TO GITHUB PROJECT ####
-file.copy(
-  from = input_file,
-  to = paste0(
-    "C:/Users/keil/Documents/main_outcome_amis2/Mplus/01_measurement/02_sdq_residuals_free.inp"
-  ),
-  overwrite = TRUE
+input_file <- write_mplus_input(
+  syntax     = longitudinal_resid_input,
+  filename   = "02_sdq_longitudinal_resid.inp",
+  github_dir = github_measurement_dir,
+  documentation = list(
+    model_id             = "M2",
+    model_name           = "Configural model with longitudinal residual correlations",
+    model_family         = "Measurement model development",
+    script               = "01_create_mplus_inputs_invariance_lcs.R",
+    sample               = "stat_t5 NE 0",
+    estimator            = "MLR",
+    specification        = paste(
+      "Four correlated factors (EXT2, EXT5, EMO2, EMO5);",
+      "marker-variable scaling; loadings freely estimated across time"
+    ),
+    residual_covariances = "Identical indicators correlated between T2 and T5",
+    covariates           = "None",
+    model_role           = "Comparison with M1; test longitudinal residual correlations",
+    notes                = ""
+  )
 )
 
 ##### CREATE M3 METRIC INVARIANCE MODEL ####
+
 metric_input <- paste0(
   "TITLE:
-  SDQ METRIC INVARIANCE MODEL T2-T5;
+  M3: SDQ METRIC INVARIANCE MODEL T2-T5;
 
 DATA:
   FILE = AMIS_mplus_dataset.dat;
@@ -394,19 +195,12 @@ VARIABLE:
     ;
 
   USEVARIABLES =
-    hyp_b2 hyp_k2 hyp_p2
-    hyp_b5 hyp_k5 hyp_p5
-    con_b2 con_k2 con_p2
-    con_b5 con_k5 con_p5
-    emo_b2 emo_k2 emo_p2
-    emo_b5 emo_k5 emo_p5
-    ;
+    hyp_b2 hyp_k2 hyp_p2 hyp_b5 hyp_k5 hyp_p5
+    con_b2 con_k2 con_p2 con_b5 con_k5 con_p5
+    emo_b2 emo_k2 emo_p2 emo_b5 emo_k5 emo_p5;
 
-  USEOBSERVATIONS =
-    stat_t5 NE 0;
-
+  USEOBSERVATIONS = stat_t5 NE 0;
   IDVARIABLE = SIC_N;
-
   MISSING = ALL (-999);
 
 ANALYSIS:
@@ -415,35 +209,18 @@ ANALYSIS:
 
 MODEL:
 
-  ! Metric invariance across T2 and T5
+  ! Equal factor loadings across T2 and T5
 
   EXT2 BY
-    hyp_b2@1
-    hyp_k2 (ex2)
-    hyp_p2 (ex3)
-    con_b2 (ex4)
-    con_k2 (ex5)
-    con_p2 (ex6);
+    hyp_b2@1 hyp_k2 (ex2) hyp_p2 (ex3)
+    con_b2 (ex4) con_k2 (ex5) con_p2 (ex6);
 
   EXT5 BY
-    hyp_b5@1
-    hyp_k5 (ex2)
-    hyp_p5 (ex3)
-    con_b5 (ex4)
-    con_k5 (ex5)
-    con_p5 (ex6);
+    hyp_b5@1 hyp_k5 (ex2) hyp_p5 (ex3)
+    con_b5 (ex4) con_k5 (ex5) con_p5 (ex6);
 
-  EMO2 BY
-    emo_b2@1
-    emo_k2 (em2)
-    emo_p2 (em3);
-
-  EMO5 BY
-    emo_b5@1
-    emo_k5 (em2)
-    emo_p5 (em3);
-
-  ! Correlations among latent factors
+  EMO2 BY emo_b2@1 emo_k2 (em2) emo_p2 (em3);
+  EMO5 BY emo_b5@1 emo_k5 (em2) emo_p5 (em3);
 
   EXT2 WITH EMO2 EXT5 EMO5;
   EXT5 WITH EMO2 EMO5;
@@ -454,49 +231,46 @@ MODEL:
   hyp_b2 WITH hyp_b5;
   hyp_k2 WITH hyp_k5;
   hyp_p2 WITH hyp_p5;
-
   con_b2 WITH con_b5;
   con_k2 WITH con_k5;
   con_p2 WITH con_p5;
-
   emo_b2 WITH emo_b5;
   emo_k2 WITH emo_k5;
   emo_p2 WITH emo_p5;
 
 OUTPUT:
-  SAMPSTAT
-  STANDARDIZED
-  TECH1
-  TECH4
-  MODINDICES(10);
+  SAMPSTAT STANDARDIZED TECH1 TECH4 MODINDICES(10);
 "
 )
 
-##### SAVE METRIC INVARIANCE INPUT ####
-input_file <- file.path(
-  mplus_input_dir,
-  "03_sdq_metric_invariance.inp"
-)
-
-writeLines(
-  metric_input,
-  con = input_file
-)
-
-##### COPY INPUT TO GITHUB PROJECT ####
-file.copy(
-  from = input_file,
-  to = paste0(
-    "C:/Users/keil/Documents/main_outcome_amis2/Mplus/02_invariance/03_sdq_metric_invariance.inp"
-  ),
-  overwrite = TRUE
+input_file <- write_mplus_input(
+  syntax     = metric_input,
+  filename   = "03_sdq_metric_invariance.inp",
+  github_dir = github_invariance_dir,
+  documentation = list(
+    model_id             = "M3",
+    model_name           = "Metric invariance model",
+    model_family         = "Measurement invariance",
+    script               = "01_create_mplus_inputs_invariance_lcs.R",
+    sample               = "stat_t5 NE 0",
+    estimator            = "MLR",
+    specification        = paste(
+      "Four correlated factors (EXT2, EXT5, EMO2, EMO5);",
+      "marker-variable scaling; corresponding factor loadings constrained",
+      "equal across T2 and T5"
+    ),
+    residual_covariances = "Identical indicators correlated between T2 and T5",
+    covariates           = "None",
+    model_role           = "Test of metric invariance relative to M2",
+    notes                = ""
+  )
 )
 
 ##### CREATE M4 WITHIN-INFORMANT CROSS-SCALE MODEL ####
-model_4_input <- paste0(
+
+within_informant_input <- paste0(
   "TITLE:
-  SDQ METRIC MODEL WITH WITHIN-INFORMANT
-  CROSS-SCALE RESIDUAL CORRELATIONS T2-T5;
+  M4: SDQ METRIC MODEL WITH WITHIN-INFORMANT RESIDUAL COVARIANCES;
 
 DATA:
   FILE = AMIS_mplus_dataset.dat;
@@ -507,19 +281,12 @@ VARIABLE:
     ;
 
   USEVARIABLES =
-    hyp_b2 hyp_k2 hyp_p2
-    hyp_b5 hyp_k5 hyp_p5
-    con_b2 con_k2 con_p2
-    con_b5 con_k5 con_p5
-    emo_b2 emo_k2 emo_p2
-    emo_b5 emo_k5 emo_p5
-    ;
+    hyp_b2 hyp_k2 hyp_p2 hyp_b5 hyp_k5 hyp_p5
+    con_b2 con_k2 con_p2 con_b5 con_k5 con_p5
+    emo_b2 emo_k2 emo_p2 emo_b5 emo_k5 emo_p5;
 
-  USEOBSERVATIONS =
-    stat_t5 NE 0;
-
+  USEOBSERVATIONS = stat_t5 NE 0;
   IDVARIABLE = SIC_N;
-
   MISSING = ALL (-999);
 
 ANALYSIS:
@@ -528,126 +295,89 @@ ANALYSIS:
 
 MODEL:
 
-  ! Metric invariance across T2 and T5
+  ! Equal factor loadings across T2 and T5
 
   EXT2 BY
-    hyp_b2@1
-    hyp_k2 (ex2)
-    hyp_p2 (ex3)
-    con_b2 (ex4)
-    con_k2 (ex5)
-    con_p2 (ex6);
+    hyp_b2@1 hyp_k2 (ex2) hyp_p2 (ex3)
+    con_b2 (ex4) con_k2 (ex5) con_p2 (ex6);
 
   EXT5 BY
-    hyp_b5@1
-    hyp_k5 (ex2)
-    hyp_p5 (ex3)
-    con_b5 (ex4)
-    con_k5 (ex5)
-    con_p5 (ex6);
+    hyp_b5@1 hyp_k5 (ex2) hyp_p5 (ex3)
+    con_b5 (ex4) con_k5 (ex5) con_p5 (ex6);
 
-  EMO2 BY
-    emo_b2@1
-    emo_k2 (em2)
-    emo_p2 (em3);
-
-  EMO5 BY
-    emo_b5@1
-    emo_k5 (em2)
-    emo_p5 (em3);
-
-  ! Correlations among latent factors
+  EMO2 BY emo_b2@1 emo_k2 (em2) emo_p2 (em3);
+  EMO5 BY emo_b5@1 emo_k5 (em2) emo_p5 (em3);
 
   EXT2 WITH EMO2 EXT5 EMO5;
   EXT5 WITH EMO2 EMO5;
   EMO2 WITH EMO5;
 
-  ! Correlated residuals of identical indicators over time
+  ! Residual covariances of identical indicators over time
 
-  hyp_b2 WITH hyp_b5 (cu_hb);
-  hyp_k2 WITH hyp_k5 (cu_hk);
-  hyp_p2 WITH hyp_p5 (cu_hp);
+  hyp_b2 WITH hyp_b5;
+  hyp_k2 WITH hyp_k5;
+  hyp_p2 WITH hyp_p5;
+  con_b2 WITH con_b5;
+  con_k2 WITH con_k5;
+  con_p2 WITH con_p5;
+  emo_b2 WITH emo_b5;
+  emo_k2 WITH emo_k5;
+  emo_p2 WITH emo_p5;
 
-  con_b2 WITH con_b5 (cu_cb);
-  con_k2 WITH con_k5 (cu_ck);
-  con_p2 WITH con_p5 (cu_cp);
+  ! Within-informant residual covariances,
+  ! constrained equal across T2 and T5
 
-  emo_b2 WITH emo_b5 (cu_eb);
-  emo_k2 WITH emo_k5 (cu_ek);
-  emo_p2 WITH emo_p5 (cu_ep);
-
-  ! Within-informant cross-scale residual correlations
-  ! constrained to equality across T2 and T5
-
-  ! Informant b
-
-  hyp_b2 WITH con_b2 (w_b_hc);
-  hyp_b5 WITH con_b5 (w_b_hc);
-
-  hyp_b2 WITH emo_b2 (w_b_he);
-  hyp_b5 WITH emo_b5 (w_b_he);
-
+  hyp_b2 WITH con_b2 (w_b_hc) emo_b2 (w_b_he);
   con_b2 WITH emo_b2 (w_b_ce);
+  hyp_b5 WITH con_b5 (w_b_hc) emo_b5 (w_b_he);
   con_b5 WITH emo_b5 (w_b_ce);
 
-  ! Informant k
-
-  hyp_k2 WITH con_k2 (w_k_hc);
-  hyp_k5 WITH con_k5 (w_k_hc);
-
-  hyp_k2 WITH emo_k2 (w_k_he);
-  hyp_k5 WITH emo_k5 (w_k_he);
-
+  hyp_k2 WITH con_k2 (w_k_hc) emo_k2 (w_k_he);
   con_k2 WITH emo_k2 (w_k_ce);
+  hyp_k5 WITH con_k5 (w_k_hc) emo_k5 (w_k_he);
   con_k5 WITH emo_k5 (w_k_ce);
 
-  ! Informant p
-
-  hyp_p2 WITH con_p2 (w_p_hc);
-  hyp_p5 WITH con_p5 (w_p_hc);
-
-  hyp_p2 WITH emo_p2 (w_p_he);
-  hyp_p5 WITH emo_p5 (w_p_he);
-
+  hyp_p2 WITH con_p2 (w_p_hc) emo_p2 (w_p_he);
   con_p2 WITH emo_p2 (w_p_ce);
+  hyp_p5 WITH con_p5 (w_p_hc) emo_p5 (w_p_he);
   con_p5 WITH emo_p5 (w_p_ce);
 
 OUTPUT:
-  SAMPSTAT
-  STANDARDIZED
-  TECH1
-  TECH4
-  MODINDICES(10);
+  SAMPSTAT STANDARDIZED TECH1 TECH4 MODINDICES(10);
 "
 )
 
-##### SAVE M5 INPUT ####
-input_file <- file.path(
-  mplus_input_dir,
-  "04_sdq_within_informant_crossscale.inp"
+input_file <- write_mplus_input(
+  syntax     = within_informant_input,
+  filename   = "04_sdq_within_informant_crossscale.inp",
+  github_dir = github_measurement_dir,
+  documentation = list(
+    model_id             = "M4",
+    model_name           = "Metric model with within-informant residual covariances",
+    model_family         = "Measurement model development",
+    script               = "01_create_mplus_inputs_invariance_lcs.R",
+    sample               = "stat_t5 NE 0",
+    estimator            = "MLR",
+    specification        = paste(
+      "Four correlated factors (EXT2, EXT5, EMO2, EMO5);",
+      "corresponding factor loadings constrained equal across T2 and T5"
+    ),
+    residual_covariances = paste(
+      "Identical indicators correlated over time;",
+      "within-informant cross-scale residual covariances constrained equal",
+      "across T2 and T5"
+    ),
+    covariates           = "None",
+    model_role           = "Test of within-informant cross-scale residual covariances",
+    notes                = "Equality constraints apply to unstandardized residual covariances"
+  )
 )
-
-writeLines(
-  model_4_input,
-  con = input_file
-)
-
-##### COPY INPUT TO GITHUB PROJECT ####
-file.copy(
-  from = input_file,
-  to = paste0(
-    "C:/Users/keil/Documents/main_outcome_amis2/",
-    "Mplus/01_measurement/",
-    "04_sdq_within_informant_crossscale.inp"
-  ),
-  overwrite = TRUE
-)
-
 ##### CREATE M5 BETWEEN-INFORMANT RESIDUAL MODEL ####
-model_5_input <- paste0(
+
+between_informant_input <- paste0(
   "TITLE:
-  SDQ METRIC MODEL WITH WITHIN- AND BETWEEN-INFORMANT
-  RESIDUAL CORRELATIONS T2-T5;
+  M5: SDQ METRIC MODEL WITH WITHIN- AND BETWEEN-INFORMANT
+  RESIDUAL COVARIANCES;
 
 DATA:
   FILE = AMIS_mplus_dataset.dat;
@@ -658,19 +388,12 @@ VARIABLE:
     ;
 
   USEVARIABLES =
-    hyp_b2 hyp_k2 hyp_p2
-    hyp_b5 hyp_k5 hyp_p5
-    con_b2 con_k2 con_p2
-    con_b5 con_k5 con_p5
-    emo_b2 emo_k2 emo_p2
-    emo_b5 emo_k5 emo_p5
-    ;
+    hyp_b2 hyp_k2 hyp_p2 hyp_b5 hyp_k5 hyp_p5
+    con_b2 con_k2 con_p2 con_b5 con_k5 con_p5
+    emo_b2 emo_k2 emo_p2 emo_b5 emo_k5 emo_p5;
 
-  USEOBSERVATIONS =
-    stat_t5 NE 0;
-
+  USEOBSERVATIONS = stat_t5 NE 0;
   IDVARIABLE = SIC_N;
-
   MISSING = ALL (-999);
 
 ANALYSIS:
@@ -679,141 +402,106 @@ ANALYSIS:
 
 MODEL:
 
-  ! Metric invariance across T2 and T5
+  ! Equal factor loadings across T2 and T5
 
   EXT2 BY
-    hyp_b2@1
-    hyp_k2 (ex2)
-    hyp_p2 (ex3)
-    con_b2 (ex4)
-    con_k2 (ex5)
-    con_p2 (ex6);
+    hyp_b2@1 hyp_k2 (ex2) hyp_p2 (ex3)
+    con_b2 (ex4) con_k2 (ex5) con_p2 (ex6);
 
   EXT5 BY
-    hyp_b5@1
-    hyp_k5 (ex2)
-    hyp_p5 (ex3)
-    con_b5 (ex4)
-    con_k5 (ex5)
-    con_p5 (ex6);
+    hyp_b5@1 hyp_k5 (ex2) hyp_p5 (ex3)
+    con_b5 (ex4) con_k5 (ex5) con_p5 (ex6);
 
-  EMO2 BY
-    emo_b2@1
-    emo_k2 (em2)
-    emo_p2 (em3);
-
-  EMO5 BY
-    emo_b5@1
-    emo_k5 (em2)
-    emo_p5 (em3);
-
-  ! Correlations among latent factors
+  EMO2 BY emo_b2@1 emo_k2 (em2) emo_p2 (em3);
+  EMO5 BY emo_b5@1 emo_k5 (em2) emo_p5 (em3);
 
   EXT2 WITH EMO2 EXT5 EMO5;
   EXT5 WITH EMO2 EMO5;
   EMO2 WITH EMO5;
 
-  ! Correlated residuals of identical indicators over time
+  ! Residual covariances of identical indicators over time
 
-  hyp_b2 WITH hyp_b5 (cu_hb);
-  hyp_k2 WITH hyp_k5 (cu_hk);
-  hyp_p2 WITH hyp_p5 (cu_hp);
+  hyp_b2 WITH hyp_b5;
+  hyp_k2 WITH hyp_k5;
+  hyp_p2 WITH hyp_p5;
+  con_b2 WITH con_b5;
+  con_k2 WITH con_k5;
+  con_p2 WITH con_p5;
+  emo_b2 WITH emo_b5;
+  emo_k2 WITH emo_k5;
+  emo_p2 WITH emo_p5;
 
-  con_b2 WITH con_b5 (cu_cb);
-  con_k2 WITH con_k5 (cu_ck);
-  con_p2 WITH con_p5 (cu_cp);
+  ! Within-informant residual covariances,
+  ! constrained equal across T2 and T5
 
-  emo_b2 WITH emo_b5 (cu_eb);
-  emo_k2 WITH emo_k5 (cu_ek);
-  emo_p2 WITH emo_p5 (cu_ep);
-
-  ! Within-informant cross-scale residual correlations
-  ! constrained to equality across T2 and T5
-
-  hyp_b2 WITH con_b2 (w_b_hc);
-  hyp_b5 WITH con_b5 (w_b_hc);
-
-  hyp_b2 WITH emo_b2 (w_b_he);
-  hyp_b5 WITH emo_b5 (w_b_he);
-
+  hyp_b2 WITH con_b2 (w_b_hc) emo_b2 (w_b_he);
   con_b2 WITH emo_b2 (w_b_ce);
+  hyp_b5 WITH con_b5 (w_b_hc) emo_b5 (w_b_he);
   con_b5 WITH emo_b5 (w_b_ce);
 
-  hyp_k2 WITH con_k2 (w_k_hc);
-  hyp_k5 WITH con_k5 (w_k_hc);
-
-  hyp_k2 WITH emo_k2 (w_k_he);
-  hyp_k5 WITH emo_k5 (w_k_he);
-
+  hyp_k2 WITH con_k2 (w_k_hc) emo_k2 (w_k_he);
   con_k2 WITH emo_k2 (w_k_ce);
+  hyp_k5 WITH con_k5 (w_k_hc) emo_k5 (w_k_he);
   con_k5 WITH emo_k5 (w_k_ce);
 
-  hyp_p2 WITH con_p2 (w_p_hc);
-  hyp_p5 WITH con_p5 (w_p_hc);
-
-  hyp_p2 WITH emo_p2 (w_p_he);
-  hyp_p5 WITH emo_p5 (w_p_he);
-
+  hyp_p2 WITH con_p2 (w_p_hc) emo_p2 (w_p_he);
   con_p2 WITH emo_p2 (w_p_ce);
+  hyp_p5 WITH con_p5 (w_p_hc) emo_p5 (w_p_he);
   con_p5 WITH emo_p5 (w_p_ce);
 
-  ! Between-informant residual correlations
-  ! constrained to equality across T2 and T5
+  ! Selected between-informant residual covariances for b and p,
+  ! constrained equal across T2 and T5
 
-  ! Same scale: informants b and p
-
-  hyp_b2 WITH hyp_p2 (bi_hyp);
-  hyp_b5 WITH hyp_p5 (bi_hyp);
-
+  hyp_b2 WITH hyp_p2 (bi_hyp) con_p2 (bi_bphc);
+  hyp_p2 WITH con_b2 (bi_pbhc);
   con_b2 WITH con_p2 (bi_con);
-  con_b5 WITH con_p5 (bi_con);
-
   emo_b2 WITH emo_p2 (bi_emo);
+
+  hyp_b5 WITH hyp_p5 (bi_hyp) con_p5 (bi_bphc);
+  hyp_p5 WITH con_b5 (bi_pbhc);
+  con_b5 WITH con_p5 (bi_con);
   emo_b5 WITH emo_p5 (bi_emo);
 
-  ! Cross-scale HYP-CON: informants b and p
-
-  hyp_b2 WITH con_p2 (bi_bphc);
-  hyp_b5 WITH con_p5 (bi_bphc);
-
-  hyp_p2 WITH con_b2 (bi_pbhc);
-  hyp_p5 WITH con_b5 (bi_pbhc);
-
 OUTPUT:
-  SAMPSTAT
-  STANDARDIZED
-  TECH1
-  TECH4
-  MODINDICES(10);
+  SAMPSTAT STANDARDIZED TECH1 TECH4 MODINDICES(10);
 "
 )
 
-##### SAVE M5 INPUT ####
-input_file <- file.path(
-  mplus_input_dir,
-  "05_sdq_between_informant_residuals.inp"
-)
-
-writeLines(
-  model_5_input,
-  con = input_file
-)
-
-##### COPY INPUT TO GITHUB PROJECT ####
-file.copy(
-  from = input_file,
-  to = paste0(
-    "C:/Users/keil/Documents/main_outcome_amis2/",
-    "Mplus/01_measurement/",
-    "05_sdq_between_informant_residuals.inp"
-  ),
-  overwrite = TRUE
+input_file <- write_mplus_input(
+  syntax     = between_informant_input,
+  filename   = "05_sdq_between_informant_residuals.inp",
+  github_dir = github_measurement_dir,
+  documentation = list(
+    model_id             = "M5",
+    model_name           = "Metric model with between-informant residual covariances",
+    model_family         = "Measurement model development",
+    script               = "01_create_mplus_inputs_invariance_lcs.R",
+    sample               = "stat_t5 NE 0",
+    estimator            = "MLR",
+    specification        = paste(
+      "Four correlated factors (EXT2, EXT5, EMO2, EMO5);",
+      "corresponding factor loadings constrained equal across T2 and T5"
+    ),
+    residual_covariances = paste(
+      "Identical indicators correlated over time;",
+      "within-informant cross-scale residual covariances;",
+      "selected same- and cross-scale residual covariances between informants b and p;",
+      "within- and between-informant covariances constrained equal across time"
+    ),
+    covariates           = "None",
+    model_role           = "Test of selected between-informant residual covariances relative to M4",
+    notes                = paste(
+      "Between-informant covariances include HYP, CON, and EMO same-scale",
+      "associations plus reciprocal HYP-CON associations for informants b and p;",
+      "equality constraints apply to unstandardized residual covariances"
+    )
+  )
 )
 
 ##### CREATE M6 FULL SCALAR INVARIANCE MODEL ####
-model_6_input <- paste0(
+full_scalar_input <- paste0(
   "TITLE:
-  SDQ FULL SCALAR INVARIANCE MODEL T2-T5;
+  M6: SDQ FULL SCALAR INVARIANCE MODEL T2-T5;
 
 DATA:
   FILE = AMIS_mplus_dataset.dat;
@@ -824,19 +512,12 @@ VARIABLE:
     ;
 
   USEVARIABLES =
-    hyp_b2 hyp_k2 hyp_p2
-    hyp_b5 hyp_k5 hyp_p5
-    con_b2 con_k2 con_p2
-    con_b5 con_k5 con_p5
-    emo_b2 emo_k2 emo_p2
-    emo_b5 emo_k5 emo_p5
-    ;
+    hyp_b2 hyp_k2 hyp_p2 hyp_b5 hyp_k5 hyp_p5
+    con_b2 con_k2 con_p2 con_b5 con_k5 con_p5
+    emo_b2 emo_k2 emo_p2 emo_b5 emo_k5 emo_p5;
 
-  USEOBSERVATIONS =
-    stat_t5 NE 0;
-
+  USEOBSERVATIONS = stat_t5 NE 0;
   IDVARIABLE = SIC_N;
-
   MISSING = ALL (-999);
 
 ANALYSIS:
@@ -845,103 +526,67 @@ ANALYSIS:
 
 MODEL:
 
-  ! Metric invariance across T2 and T5
+  ! Equal factor loadings across T2 and T5
 
   EXT2 BY
-    hyp_b2@1
-    hyp_k2 (ex2)
-    hyp_p2 (ex3)
-    con_b2 (ex4)
-    con_k2 (ex5)
-    con_p2 (ex6);
+    hyp_b2@1 hyp_k2 (ex2) hyp_p2 (ex3)
+    con_b2 (ex4) con_k2 (ex5) con_p2 (ex6);
 
   EXT5 BY
-    hyp_b5@1
-    hyp_k5 (ex2)
-    hyp_p5 (ex3)
-    con_b5 (ex4)
-    con_k5 (ex5)
-    con_p5 (ex6);
+    hyp_b5@1 hyp_k5 (ex2) hyp_p5 (ex3)
+    con_b5 (ex4) con_k5 (ex5) con_p5 (ex6);
 
-  EMO2 BY
-    emo_b2@1
-    emo_k2 (em2)
-    emo_p2 (em3);
-
-  EMO5 BY
-    emo_b5@1
-    emo_k5 (em2)
-    emo_p5 (em3);
-
-  ! Correlations among latent factors
+  EMO2 BY emo_b2@1 emo_k2 (em2) emo_p2 (em3);
+  EMO5 BY emo_b5@1 emo_k5 (em2) emo_p5 (em3);
 
   EXT2 WITH EMO2 EXT5 EMO5;
   EXT5 WITH EMO2 EMO5;
   EMO2 WITH EMO5;
 
-  ! Correlated residuals of identical indicators over time
+  ! Residual covariances of identical indicators over time
 
-  hyp_b2 WITH hyp_b5 (cu_hb);
-  hyp_k2 WITH hyp_k5 (cu_hk);
-  hyp_p2 WITH hyp_p5 (cu_hp);
+  hyp_b2 WITH hyp_b5;
+  hyp_k2 WITH hyp_k5;
+  hyp_p2 WITH hyp_p5;
+  con_b2 WITH con_b5;
+  con_k2 WITH con_k5;
+  con_p2 WITH con_p5;
+  emo_b2 WITH emo_b5;
+  emo_k2 WITH emo_k5;
+  emo_p2 WITH emo_p5;
 
-  con_b2 WITH con_b5 (cu_cb);
-  con_k2 WITH con_k5 (cu_ck);
-  con_p2 WITH con_p5 (cu_cp);
+  ! Within-informant residual covariances,
+  ! constrained equal across T2 and T5
 
-  emo_b2 WITH emo_b5 (cu_eb);
-  emo_k2 WITH emo_k5 (cu_ek);
-  emo_p2 WITH emo_p5 (cu_ep);
-
-  ! Within-informant cross-scale residual correlations
-  ! constrained to equality across T2 and T5
-
-  hyp_b2 WITH con_b2 (w_b_hc);
-  hyp_b5 WITH con_b5 (w_b_hc);
-
-  hyp_b2 WITH emo_b2 (w_b_he);
-  hyp_b5 WITH emo_b5 (w_b_he);
-
+  hyp_b2 WITH con_b2 (w_b_hc) emo_b2 (w_b_he);
   con_b2 WITH emo_b2 (w_b_ce);
+  hyp_b5 WITH con_b5 (w_b_hc) emo_b5 (w_b_he);
   con_b5 WITH emo_b5 (w_b_ce);
 
-  hyp_k2 WITH con_k2 (w_k_hc);
-  hyp_k5 WITH con_k5 (w_k_hc);
-
-  hyp_k2 WITH emo_k2 (w_k_he);
-  hyp_k5 WITH emo_k5 (w_k_he);
-
+  hyp_k2 WITH con_k2 (w_k_hc) emo_k2 (w_k_he);
   con_k2 WITH emo_k2 (w_k_ce);
+  hyp_k5 WITH con_k5 (w_k_hc) emo_k5 (w_k_he);
   con_k5 WITH emo_k5 (w_k_ce);
 
-  hyp_p2 WITH con_p2 (w_p_hc);
-  hyp_p5 WITH con_p5 (w_p_hc);
-
-  hyp_p2 WITH emo_p2 (w_p_he);
-  hyp_p5 WITH emo_p5 (w_p_he);
-
+  hyp_p2 WITH con_p2 (w_p_hc) emo_p2 (w_p_he);
   con_p2 WITH emo_p2 (w_p_ce);
+  hyp_p5 WITH con_p5 (w_p_hc) emo_p5 (w_p_he);
   con_p5 WITH emo_p5 (w_p_ce);
 
-  ! Between-informant residual correlations
-  ! constrained to equality across T2 and T5
+  ! Selected between-informant residual covariances for b and p,
+  ! constrained equal across T2 and T5
 
-  hyp_b2 WITH hyp_p2 (bi_hyp);
-  hyp_b5 WITH hyp_p5 (bi_hyp);
-
+  hyp_b2 WITH hyp_p2 (bi_hyp) con_p2 (bi_bphc);
+  hyp_p2 WITH con_b2 (bi_pbhc);
   con_b2 WITH con_p2 (bi_con);
-  con_b5 WITH con_p5 (bi_con);
-
   emo_b2 WITH emo_p2 (bi_emo);
+
+  hyp_b5 WITH hyp_p5 (bi_hyp) con_p5 (bi_bphc);
+  hyp_p5 WITH con_b5 (bi_pbhc);
+  con_b5 WITH con_p5 (bi_con);
   emo_b5 WITH emo_p5 (bi_emo);
 
-  hyp_b2 WITH con_p2 (bi_bphc);
-  hyp_b5 WITH con_p5 (bi_bphc);
-
-  hyp_p2 WITH con_b2 (bi_pbhc);
-  hyp_p5 WITH con_b5 (bi_pbhc);
-
-  ! Full scalar invariance across T2 and T5
+  ! Equal indicator intercepts across T2 and T5
 
   [hyp_b2 hyp_b5] (ihb);
   [hyp_k2 hyp_k5] (ihk);
@@ -954,45 +599,54 @@ MODEL:
   [emo_b2 emo_b5] (ieb);
   [emo_k2 emo_k5] (iek);
   [emo_p2 emo_p5] (iep);
-  
+
+  ! Latent means fixed at zero at T2 and freely estimated at T5
+
   [EXT2@0 EMO2@0];
   [EXT5 EMO5];
 
 OUTPUT:
-  SAMPSTAT
-  STANDARDIZED
-  TECH1
-  TECH4
-  MODINDICES(4);
+  SAMPSTAT STANDARDIZED TECH1 TECH4 MODINDICES(4);
 "
 )
 
-##### SAVE M6 INPUT ####
-input_file <- file.path(
-  mplus_input_dir,
-  "06_sdq_full_scalar_invariance.inp"
-)
-
-writeLines(
-  model_6_input,
-  con = input_file
-)
-
-##### COPY INPUT TO GITHUB PROJECT ####
-file.copy(
-  from = input_file,
-  to = paste0(
-    "C:/Users/keil/Documents/main_outcome_amis2/",
-    "Mplus/02_invariance/",
-    "06_sdq_full_scalar_invariance.inp"
-  ),
-  overwrite = TRUE
+input_file <- write_mplus_input(
+  syntax     = full_scalar_input,
+  filename   = "06_sdq_full_scalar_invariance.inp",
+  github_dir = github_invariance_dir,
+  documentation = list(
+    model_id             = "M6",
+    model_name           = "Full scalar invariance model",
+    model_family         = "Measurement invariance",
+    script               = "01_create_mplus_inputs_invariance_lcs.R",
+    sample               = "stat_t5 NE 0",
+    estimator            = "MLR",
+    specification        = paste(
+      "Four correlated factors (EXT2, EXT5, EMO2, EMO5);",
+      "corresponding factor loadings and all indicator intercepts",
+      "constrained equal across T2 and T5;",
+      "latent means fixed at zero at T2 and freely estimated at T5"
+    ),
+    residual_covariances = paste(
+      "Identical indicators correlated over time;",
+      "within-informant cross-scale residual covariances;",
+      "selected same- and cross-scale residual covariances between informants b and p;",
+      "within- and between-informant covariances constrained equal across time"
+    ),
+    covariates           = "None",
+    model_role           = "Test of full scalar invariance relative to M5",
+    notes                = paste(
+      "All nine indicator intercepts constrained equal across time;",
+      "equality constraints apply to unstandardized parameters"
+    )
+  )
 )
 
 ##### CREATE M7 PARTIAL SCALAR INVARIANCE MODEL ####
-model_7_input <- paste0(
+
+partial_scalar_input <- paste0(
   "TITLE:
-  SDQ PARTIAL SCALAR INVARIANCE MODEL T2-T5;
+  M7: SDQ PARTIAL SCALAR INVARIANCE MODEL T2-T5;
 
 DATA:
   FILE = AMIS_mplus_dataset.dat;
@@ -1003,19 +657,12 @@ VARIABLE:
     ;
 
   USEVARIABLES =
-    hyp_b2 hyp_k2 hyp_p2
-    hyp_b5 hyp_k5 hyp_p5
-    con_b2 con_k2 con_p2
-    con_b5 con_k5 con_p5
-    emo_b2 emo_k2 emo_p2
-    emo_b5 emo_k5 emo_p5
-    ;
+    hyp_b2 hyp_k2 hyp_p2 hyp_b5 hyp_k5 hyp_p5
+    con_b2 con_k2 con_p2 con_b5 con_k5 con_p5
+    emo_b2 emo_k2 emo_p2 emo_b5 emo_k5 emo_p5;
 
-  USEOBSERVATIONS =
-    stat_t5 NE 0;
-
+  USEOBSERVATIONS = stat_t5 NE 0;
   IDVARIABLE = SIC_N;
-
   MISSING = ALL (-999);
 
 ANALYSIS:
@@ -1024,103 +671,68 @@ ANALYSIS:
 
 MODEL:
 
-  ! Metric invariance across T2 and T5
+  ! Equal factor loadings across T2 and T5
 
   EXT2 BY
-    hyp_b2@1
-    hyp_k2 (ex2)
-    hyp_p2 (ex3)
-    con_b2 (ex4)
-    con_k2 (ex5)
-    con_p2 (ex6);
+    hyp_b2@1 hyp_k2 (ex2) hyp_p2 (ex3)
+    con_b2 (ex4) con_k2 (ex5) con_p2 (ex6);
 
   EXT5 BY
-    hyp_b5@1
-    hyp_k5 (ex2)
-    hyp_p5 (ex3)
-    con_b5 (ex4)
-    con_k5 (ex5)
-    con_p5 (ex6);
+    hyp_b5@1 hyp_k5 (ex2) hyp_p5 (ex3)
+    con_b5 (ex4) con_k5 (ex5) con_p5 (ex6);
 
-  EMO2 BY
-    emo_b2@1
-    emo_k2 (em2)
-    emo_p2 (em3);
-
-  EMO5 BY
-    emo_b5@1
-    emo_k5 (em2)
-    emo_p5 (em3);
-
-  ! Correlations among latent factors
+  EMO2 BY emo_b2@1 emo_k2 (em2) emo_p2 (em3);
+  EMO5 BY emo_b5@1 emo_k5 (em2) emo_p5 (em3);
 
   EXT2 WITH EMO2 EXT5 EMO5;
   EXT5 WITH EMO2 EMO5;
   EMO2 WITH EMO5;
 
-  ! Correlated residuals of identical indicators over time
+  ! Residual covariances of identical indicators over time
 
-  hyp_b2 WITH hyp_b5 (cu_hb);
-  hyp_k2 WITH hyp_k5 (cu_hk);
-  hyp_p2 WITH hyp_p5 (cu_hp);
+  hyp_b2 WITH hyp_b5;
+  hyp_k2 WITH hyp_k5;
+  hyp_p2 WITH hyp_p5;
+  con_b2 WITH con_b5;
+  con_k2 WITH con_k5;
+  con_p2 WITH con_p5;
+  emo_b2 WITH emo_b5;
+  emo_k2 WITH emo_k5;
+  emo_p2 WITH emo_p5;
 
-  con_b2 WITH con_b5 (cu_cb);
-  con_k2 WITH con_k5 (cu_ck);
-  con_p2 WITH con_p5 (cu_cp);
+  ! Within-informant residual covariances,
+  ! constrained equal across T2 and T5
 
-  emo_b2 WITH emo_b5 (cu_eb);
-  emo_k2 WITH emo_k5 (cu_ek);
-  emo_p2 WITH emo_p5 (cu_ep);
-
-  ! Within-informant cross-scale residual correlations
-  ! constrained to equality across T2 and T5
-
-  hyp_b2 WITH con_b2 (w_b_hc);
-  hyp_b5 WITH con_b5 (w_b_hc);
-
-  hyp_b2 WITH emo_b2 (w_b_he);
-  hyp_b5 WITH emo_b5 (w_b_he);
-
+  hyp_b2 WITH con_b2 (w_b_hc) emo_b2 (w_b_he);
   con_b2 WITH emo_b2 (w_b_ce);
+  hyp_b5 WITH con_b5 (w_b_hc) emo_b5 (w_b_he);
   con_b5 WITH emo_b5 (w_b_ce);
 
-  hyp_k2 WITH con_k2 (w_k_hc);
-  hyp_k5 WITH con_k5 (w_k_hc);
-
-  hyp_k2 WITH emo_k2 (w_k_he);
-  hyp_k5 WITH emo_k5 (w_k_he);
-
+  hyp_k2 WITH con_k2 (w_k_hc) emo_k2 (w_k_he);
   con_k2 WITH emo_k2 (w_k_ce);
+  hyp_k5 WITH con_k5 (w_k_hc) emo_k5 (w_k_he);
   con_k5 WITH emo_k5 (w_k_ce);
 
-  hyp_p2 WITH con_p2 (w_p_hc);
-  hyp_p5 WITH con_p5 (w_p_hc);
-
-  hyp_p2 WITH emo_p2 (w_p_he);
-  hyp_p5 WITH emo_p5 (w_p_he);
-
+  hyp_p2 WITH con_p2 (w_p_hc) emo_p2 (w_p_he);
   con_p2 WITH emo_p2 (w_p_ce);
+  hyp_p5 WITH con_p5 (w_p_hc) emo_p5 (w_p_he);
   con_p5 WITH emo_p5 (w_p_ce);
 
-  ! Between-informant residual correlations
-  ! constrained to equality across T2 and T5
+  ! Selected between-informant residual covariances for b and p,
+  ! constrained equal across T2 and T5
 
-  hyp_b2 WITH hyp_p2 (bi_hyp);
-  hyp_b5 WITH hyp_p5 (bi_hyp);
-
+  hyp_b2 WITH hyp_p2 (bi_hyp) con_p2 (bi_bphc);
+  hyp_p2 WITH con_b2 (bi_pbhc);
   con_b2 WITH con_p2 (bi_con);
-  con_b5 WITH con_p5 (bi_con);
-
   emo_b2 WITH emo_p2 (bi_emo);
+
+  hyp_b5 WITH hyp_p5 (bi_hyp) con_p5 (bi_bphc);
+  hyp_p5 WITH con_b5 (bi_pbhc);
+  con_b5 WITH con_p5 (bi_con);
   emo_b5 WITH emo_p5 (bi_emo);
 
-  hyp_b2 WITH con_p2 (bi_bphc);
-  hyp_b5 WITH con_p5 (bi_bphc);
-
-  hyp_p2 WITH con_b2 (bi_pbhc);
-  hyp_p5 WITH con_b5 (bi_pbhc);
-
-  ! Partial scalar invariance across T2 and T5
+  ! Equal indicator intercepts across T2 and T5,
+  ! except for emo_k
 
   [hyp_b2 hyp_b5] (ihb);
   [hyp_k2 hyp_k5] (ihk);
@@ -1133,44 +745,138 @@ MODEL:
   [emo_b2 emo_b5] (ieb);
   [emo_p2 emo_p5] (iep);
 
-  ! Intercepts of emo_k are freely estimated across time
+  ! Freely estimated emo_k intercepts at each time point
 
   [emo_k2] (iek2);
   [emo_k5] (iek5);
-  
+
+  ! Latent means fixed at zero at T2 and freely estimated at T5
+
   [EXT2@0 EMO2@0];
   [EXT5 EMO5];
 
 OUTPUT:
-  SAMPSTAT
-  STANDARDIZED
-  TECH1
-  TECH4
-  MODINDICES(4);
+  SAMPSTAT STANDARDIZED TECH1 TECH4 MODINDICES(4);
 "
 )
 
-##### SAVE M7 INPUT ####
-input_file <- file.path(
+input_file <- write_mplus_input(
+  syntax     = partial_scalar_input,
+  filename   = "07_sdq_partial_scalar_invariance.inp",
+  github_dir = github_invariance_dir,
+  documentation = list(
+    model_id             = "M7",
+    model_name           = "Partial scalar invariance model",
+    model_family         = "Measurement invariance",
+    script               = "01_create_mplus_inputs_invariance_lcs.R",
+    sample               = "stat_t5 NE 0",
+    estimator            = "MLR",
+    specification        = paste(
+      "Four correlated factors (EXT2, EXT5, EMO2, EMO5);",
+      "corresponding factor loadings and eight of nine indicator intercepts",
+      "constrained equal across T2 and T5;",
+      "emo_k intercept freely estimated at each time point;",
+      "latent means fixed at zero at T2 and freely estimated at T5"
+    ),
+    residual_covariances = paste(
+      "Identical indicators correlated over time;",
+      "within-informant cross-scale residual covariances;",
+      "selected same- and cross-scale residual covariances between informants b and p;",
+      "within- and between-informant covariances constrained equal across time"
+    ),
+    covariates           = "None",
+    model_role           = "Final partial scalar invariance model following rejection of full scalar invariance",
+    notes                = paste(
+      "Equality constraint on the emo_k intercept released across time;",
+      "all remaining indicator intercepts constrained equal;",
+      "equality constraints apply to unstandardized parameters"
+    )
+  )
+)
+
+##### RUN INVARIANCE INPUT FILES
+
+#-------------------------------------------------------------------------
+##### RUN MEASUREMENT AND INVARIANCE MODELS #####
+#-------------------------------------------------------------------------
+
+run_mplus_models <- TRUE
+
+invariance_input_files <- file.path(
   mplus_input_dir,
-  "07_sdq_partial_scalar_invariance.inp"
-)
-
-writeLines(
-  model_7_input,
-  con = input_file
-)
-
-##### COPY INPUT TO GITHUB PROJECT ####
-file.copy(
-  from = input_file,
-  to = paste0(
-    "C:/Users/keil/Documents/main_outcome_amis2/",
-    "Mplus/02_invariance/",
+  c(
+    "01_sdq_configural.inp",
+    "02_sdq_longitudinal_resid.inp",
+    "03_sdq_metric_invariance.inp",
+    "04_sdq_within_informant_crossscale.inp",
+    "05_sdq_between_informant_residuals.inp",
+    "06_sdq_full_scalar_invariance.inp",
     "07_sdq_partial_scalar_invariance.inp"
-  ),
-  overwrite = TRUE
+  )
 )
+
+mplus_data_file <- file.path(
+  mplus_input_dir,
+  "AMIS_mplus_dataset.dat"
+)
+
+
+##### CHECK REQUIRED FILES #####
+
+required_mplus_files <- c(
+  invariance_input_files,
+  mplus_data_file
+)
+
+missing_mplus_files <- required_mplus_files[
+  !file.exists(required_mplus_files)
+]
+
+if (length(missing_mplus_files) > 0) {
+  stop(
+    "The following required Mplus files are missing:\n",
+    paste(
+      missing_mplus_files,
+      collapse = "\n"
+    )
+  )
+}
+
+
+##### RUN MODELS #####
+
+if (run_mplus_models) {
+  
+  if (
+    MplusAutomation::mplusAvailable(
+      silent = FALSE
+    ) != 0
+  ) {
+    stop(
+      "Mplus could not be detected by MplusAutomation."
+    )
+  }
+  
+  MplusAutomation::runModels(
+    target = invariance_input_files,
+    
+    # Run models even if older output files exist
+    replaceOutfile = "always",
+    
+    # Do not print the complete Mplus output in R
+    showOutput = FALSE,
+    
+    # Save a log of the model runs
+    logFile = file.path(
+      mplus_input_dir,
+      "SDQ_measurement_invariance_run.log"
+    ),
+    
+    # Show progress messages
+    quiet = FALSE
+  )
+}
+
 
 # ##### CREATE M8 PARTIAL SCALAR INVARIANCE MODEL ####
 # model_8_input <- paste0(
@@ -1758,32 +1464,83 @@ writeLines(
   con = input_file
 )
 
+#-----------------------------------------------------------------------
+##### RUN MPLUS MODEL LCS #####
+#-----------------------------------------------------------------------
+
+run_mplus_models <- TRUE
+
+lcs_input_files <- file.path(
+  mplus_input_dir,
+  c(
+    "08_sdq_classical_lcs.inp")
+)
+
+
+##### CHECK INPUT FILES #####
+
+missing_input_files <- lcs_input_files[
+  !file.exists(lcs_input_files)
+]
+
+if (length(missing_input_files) > 0) {
+  stop(
+    "The following Mplus input files are missing:\n",
+    paste(
+      missing_input_files,
+      collapse = "\n"
+    )
+  )
+}
+
+
+##### RUN MODELS #####
+
+if (run_mplus_models) {
+  
+  if (
+    MplusAutomation::mplusAvailable(
+      silent = FALSE
+    ) != 0
+  ) {
+    stop(
+      "Mplus could not be detected by MplusAutomation."
+    )
+  }
+  
+  MplusAutomation::runModels(
+    target = lcs_input_files,
+    
+    # Run the models even if an older .out file exists
+    replaceOutfile = "always",
+    
+    # Do not print the full Mplus estimation output in R
+    showOutput = FALSE,
+    
+    # Save a run log
+    logFile = file.path(
+      mplus_input_dir,
+      "SDQ_measurement_lcs_run.log"
+    ),
+    
+    # Show progress messages
+    quiet = FALSE
+  )
+}
+
 ##### COPY INPUT TO GITHUB PROJECT ####
-file.copy(
-  from = input_file,
-  to = github_lcs_dir,
-  overwrite = TRUE
+copy_file_checked(
+  source_file = input_file,
+  target = file.path(
+    github_lcs_dir,
+    basename(input_file)
+  )
 )
 
 #-------------------------------------------------------------
 
 ##### WRITE TABLE WITH RESULTS OF MEASUREMENT INVARIANCE ####
 #-------------------------------------------------------------
-##### DEFINE MPLUS OUTPUT DIRECTORY ####
-mplus_output_dir <- "C:/MPLUS/Inputs"
-
-##### DEFINE INVARIANCE RESULTS DIRECTORY ####
-invariance_results_dir <- paste0(
-  "C:/Users/keil/seadrive_root/Jan Keil/Meine Bibliotheken/",
-  "MAIN OUTCOME/03_results/Mplus/02_invariance"
-)
-
-dir.create(
-  invariance_results_dir,
-  recursive = TRUE,
-  showWarnings = FALSE
-)
-
 ##### IDENTIFY INVARIANCE OUTPUT FILES ####
 invariance_output_files <- list.files(
   path = mplus_output_dir,
@@ -2357,15 +2114,6 @@ lcs_output_file <- file.path(
 
 stopifnot(
   file.exists(lcs_output_file)
-)
-
-##### DEFINE LCS RESULTS DIRECTORY ####
-lcs_results_dir <- mplus_results_dir_lcs
-
-dir.create(
-  mplus_results_dir_lcs,
-  recursive = TRUE,
-  showWarnings = FALSE
 )
 
 ##### READ LCS OUTPUT ####

@@ -1,12 +1,12 @@
 TITLE:
-  SDQ FULL SCALAR INVARIANCE MODEL T2-T5;
+  M6: SDQ FULL SCALAR INVARIANCE MODEL T2-T5;
 
 DATA:
   FILE = AMIS_mplus_dataset.dat;
 
 VARIABLE:
   NAMES =
-     has_sdq has_mt has_cg has_diag diag_vor int_vor ext_vor int_ext aff_vor anx_vor
+    has_sdq has_mt has_cg has_diag diag_vor int_vor ext_vor int_ext aff_vor anx_vor
     psy_vor vh_vor adhs_vor weit_vor abh_vor ess_vor tic_vor enur_vor enk_vor anp_vor
     ptbs_vor bipo_vor md_vor dys_vor pan_vor gad_vor ago_vor soz_vor phob_vor zwa_vor
     trn_vor cd_vor odd_vor dnos_vor bind_vor mut_vor sext5 age_b2 age_k2 age_p2 age_t2
@@ -53,19 +53,12 @@ VARIABLE:
     ;
 
   USEVARIABLES =
-    hyp_b2 hyp_k2 hyp_p2
-    hyp_b5 hyp_k5 hyp_p5
-    con_b2 con_k2 con_p2
-    con_b5 con_k5 con_p5
-    emo_b2 emo_k2 emo_p2
-    emo_b5 emo_k5 emo_p5
-    ;
+    hyp_b2 hyp_k2 hyp_p2 hyp_b5 hyp_k5 hyp_p5
+    con_b2 con_k2 con_p2 con_b5 con_k5 con_p5
+    emo_b2 emo_k2 emo_p2 emo_b5 emo_k5 emo_p5;
 
-  USEOBSERVATIONS =
-    stat_t5 NE 0;
-
+  USEOBSERVATIONS = stat_t5 NE 0;
   IDVARIABLE = SIC_N;
-
   MISSING = ALL (-999);
 
 ANALYSIS:
@@ -74,103 +67,91 @@ ANALYSIS:
 
 MODEL:
 
-  ! Metric invariance across T2 and T5
+  ! Equal factor loadings across T2 and T5
 
   EXT2 BY
-    hyp_b2@1
-    hyp_k2 (ex2)
+    hyp_b2@1 
+    hyp_k2 (ex2) 
     hyp_p2 (ex3)
-    con_b2 (ex4)
-    con_k2 (ex5)
+    con_b2 (ex4) 
+    con_k2 (ex5) 
     con_p2 (ex6);
 
   EXT5 BY
-    hyp_b5@1
-    hyp_k5 (ex2)
+    hyp_b5@1 
+    hyp_k5 (ex2) 
     hyp_p5 (ex3)
-    con_b5 (ex4)
-    con_k5 (ex5)
+    con_b5 (ex4) 
+    con_k5 (ex5) 
     con_p5 (ex6);
 
-  EMO2 BY
-    emo_b2@1
-    emo_k2 (em2)
+  EMO2 BY emo_b2@1 
+    emo_k2 (em2) 
     emo_p2 (em3);
-
-  EMO5 BY
-    emo_b5@1
-    emo_k5 (em2)
+  
+  EMO5 BY emo_b5@1 
+    emo_k5 (em2) 
     emo_p5 (em3);
-
-  ! Correlations among latent factors
-
+    
   EXT2 WITH EMO2 EXT5 EMO5;
   EXT5 WITH EMO2 EMO5;
   EMO2 WITH EMO5;
 
-  ! Correlated residuals of identical indicators over time
+  ! Residual covariances of identical indicators over time
 
-  hyp_b2 WITH hyp_b5 (cu_hb);
-  hyp_k2 WITH hyp_k5 (cu_hk);
-  hyp_p2 WITH hyp_p5 (cu_hp);
+  hyp_b2 WITH hyp_b5;
+  hyp_k2 WITH hyp_k5;
+  hyp_p2 WITH hyp_p5;
+  con_b2 WITH con_b5;
+  con_k2 WITH con_k5;
+  con_p2 WITH con_p5;
+  emo_b2 WITH emo_b5;
+  emo_k2 WITH emo_k5;
+  emo_p2 WITH emo_p5;
 
-  con_b2 WITH con_b5 (cu_cb);
-  con_k2 WITH con_k5 (cu_ck);
-  con_p2 WITH con_p5 (cu_cp);
-
-  emo_b2 WITH emo_b5 (cu_eb);
-  emo_k2 WITH emo_k5 (cu_ek);
-  emo_p2 WITH emo_p5 (cu_ep);
-
-  ! Within-informant cross-scale residual correlations
-  ! constrained to equality across T2 and T5
+! Within-informant residual covariances
+! constrained equal across T2 and T5
 
   hyp_b2 WITH con_b2 (w_b_hc);
-  hyp_b5 WITH con_b5 (w_b_hc);
-
   hyp_b2 WITH emo_b2 (w_b_he);
-  hyp_b5 WITH emo_b5 (w_b_he);
-
   con_b2 WITH emo_b2 (w_b_ce);
+
+  hyp_b5 WITH con_b5 (w_b_hc);
+  hyp_b5 WITH emo_b5 (w_b_he);
   con_b5 WITH emo_b5 (w_b_ce);
 
   hyp_k2 WITH con_k2 (w_k_hc);
-  hyp_k5 WITH con_k5 (w_k_hc);
-
   hyp_k2 WITH emo_k2 (w_k_he);
-  hyp_k5 WITH emo_k5 (w_k_he);
-
   con_k2 WITH emo_k2 (w_k_ce);
+
+  hyp_k5 WITH con_k5 (w_k_hc);
+  hyp_k5 WITH emo_k5 (w_k_he);
   con_k5 WITH emo_k5 (w_k_ce);
 
   hyp_p2 WITH con_p2 (w_p_hc);
-  hyp_p5 WITH con_p5 (w_p_hc);
-
   hyp_p2 WITH emo_p2 (w_p_he);
-  hyp_p5 WITH emo_p5 (w_p_he);
-
   con_p2 WITH emo_p2 (w_p_ce);
-  con_p5 WITH emo_p5 (w_p_ce);
 
-  ! Between-informant residual correlations
-  ! constrained to equality across T2 and T5
+  hyp_p5 WITH con_p5 (w_p_hc);
+  hyp_p5 WITH emo_p5 (w_p_he);
+  con_p5 WITH emo_p5 (w_p_ce);
+  
+  ! Selected between-informant residual covariances for b and p,
+  ! constrained equal across T2 and T5
 
   hyp_b2 WITH hyp_p2 (bi_hyp);
-  hyp_b5 WITH hyp_p5 (bi_hyp);
-
+  hyp_b2 WITH con_p2 (bi_bphc);
+  hyp_p2 WITH con_b2 (bi_pbhc);
   con_b2 WITH con_p2 (bi_con);
-  con_b5 WITH con_p5 (bi_con);
-
   emo_b2 WITH emo_p2 (bi_emo);
+
+  hyp_b5 WITH hyp_p5 (bi_hyp);
+  hyp_b5 WITH con_p5 (bi_bphc);
+  hyp_p5 WITH con_b5 (bi_pbhc);
+  con_b5 WITH con_p5 (bi_con);
   emo_b5 WITH emo_p5 (bi_emo);
 
-  hyp_b2 WITH con_p2 (bi_bphc);
-  hyp_b5 WITH con_p5 (bi_bphc);
-
-  hyp_p2 WITH con_b2 (bi_pbhc);
-  hyp_p5 WITH con_b5 (bi_pbhc);
-
-  ! Full scalar invariance across T2 and T5
+  ! Equal indicator intercepts across T2 and T5
 
   [hyp_b2 hyp_b5] (ihb);
   [hyp_k2 hyp_k5] (ihk);
@@ -183,14 +164,12 @@ MODEL:
   [emo_b2 emo_b5] (ieb);
   [emo_k2 emo_k5] (iek);
   [emo_p2 emo_p5] (iep);
-  
+
+  ! Latent means fixed at zero at T2 and freely estimated at T5
+
   [EXT2@0 EMO2@0];
   [EXT5 EMO5];
 
 OUTPUT:
-  SAMPSTAT
-  STANDARDIZED
-  TECH1
-  TECH4
-  MODINDICES(4);
+  SAMPSTAT STANDARDIZED TECH1 TECH4 MODINDICES(4);
 

@@ -1,12 +1,12 @@
 TITLE:
-  SDQ METRIC INVARIANCE MODEL T2-T5;
+  M3: SDQ METRIC INVARIANCE MODEL T2-T5;
 
 DATA:
   FILE = AMIS_mplus_dataset.dat;
 
 VARIABLE:
   NAMES =
-     has_sdq has_mt has_cg has_diag diag_vor int_vor ext_vor int_ext aff_vor anx_vor
+    has_sdq has_mt has_cg has_diag diag_vor int_vor ext_vor int_ext aff_vor anx_vor
     psy_vor vh_vor adhs_vor weit_vor abh_vor ess_vor tic_vor enur_vor enk_vor anp_vor
     ptbs_vor bipo_vor md_vor dys_vor pan_vor gad_vor ago_vor soz_vor phob_vor zwa_vor
     trn_vor cd_vor odd_vor dnos_vor bind_vor mut_vor sext5 age_b2 age_k2 age_p2 age_t2
@@ -53,19 +53,12 @@ VARIABLE:
     ;
 
   USEVARIABLES =
-    hyp_b2 hyp_k2 hyp_p2
-    hyp_b5 hyp_k5 hyp_p5
-    con_b2 con_k2 con_p2
-    con_b5 con_k5 con_p5
-    emo_b2 emo_k2 emo_p2
-    emo_b5 emo_k5 emo_p5
-    ;
+    hyp_b2 hyp_k2 hyp_p2 hyp_b5 hyp_k5 hyp_p5
+    con_b2 con_k2 con_p2 con_b5 con_k5 con_p5
+    emo_b2 emo_k2 emo_p2 emo_b5 emo_k5 emo_p5;
 
-  USEOBSERVATIONS =
-    stat_t5 NE 0;
-
+  USEOBSERVATIONS = stat_t5 NE 0;
   IDVARIABLE = SIC_N;
-
   MISSING = ALL (-999);
 
 ANALYSIS:
@@ -74,35 +67,31 @@ ANALYSIS:
 
 MODEL:
 
-  ! Metric invariance across T2 and T5
+  ! Equal factor loadings across T2 and T5
 
   EXT2 BY
-    hyp_b2@1
-    hyp_k2 (ex2)
+    hyp_b2@1 
+    hyp_k2 (ex2) 
     hyp_p2 (ex3)
-    con_b2 (ex4)
-    con_k2 (ex5)
+    con_b2 (ex4) 
+    con_k2 (ex5) 
     con_p2 (ex6);
 
   EXT5 BY
-    hyp_b5@1
-    hyp_k5 (ex2)
+    hyp_b5@1 
+    hyp_k5 (ex2) 
     hyp_p5 (ex3)
-    con_b5 (ex4)
-    con_k5 (ex5)
+    con_b5 (ex4) 
+    con_k5 (ex5) 
     con_p5 (ex6);
 
-  EMO2 BY
-    emo_b2@1
-    emo_k2 (em2)
+  EMO2 BY emo_b2@1 
+    emo_k2 (em2) 
     emo_p2 (em3);
-
-  EMO5 BY
-    emo_b5@1
-    emo_k5 (em2)
+  
+  EMO5 BY emo_b5@1 
+    emo_k5 (em2) 
     emo_p5 (em3);
-
-  ! Correlations among latent factors
 
   EXT2 WITH EMO2 EXT5 EMO5;
   EXT5 WITH EMO2 EMO5;
@@ -113,19 +102,13 @@ MODEL:
   hyp_b2 WITH hyp_b5;
   hyp_k2 WITH hyp_k5;
   hyp_p2 WITH hyp_p5;
-
   con_b2 WITH con_b5;
   con_k2 WITH con_k5;
   con_p2 WITH con_p5;
-
   emo_b2 WITH emo_b5;
   emo_k2 WITH emo_k5;
   emo_p2 WITH emo_p5;
 
 OUTPUT:
-  SAMPSTAT
-  STANDARDIZED
-  TECH1
-  TECH4
-  MODINDICES(10);
+  SAMPSTAT STANDARDIZED TECH1 TECH4 MODINDICES(10);
 

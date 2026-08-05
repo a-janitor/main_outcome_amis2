@@ -2,12 +2,8 @@
 ##### CREATE FINAL TABLES: MAIN OUTCOME PAPER #####
 #-----------------------------------------------------------------------
 
-# This script can be run independently after the Mplus models have run.
-# It creates the manuscript and appendix tables for M21-M26.
-
-source(
-  "C:/Users/keil/Documents/main_outcome_amis2/R/03_data_analysis/00_setup_standardized.R"
-)
+source("C:/Users/keil/Documents/main_outcome_amis2/R/03_data_analysis/00_setup_standardized.R")
+source("C:/Users/keil/Documents/main_outcome_amis2/R/03_data_analysis/00_helpers_final_tables.R")
 
 required_packages <- c(
   "MplusAutomation", "dplyr", "tidyr", "tibble",
@@ -20,6 +16,290 @@ missing_packages <- required_packages[
 
 if (length(missing_packages) > 0) {
   stop("Install first: ", paste(missing_packages, collapse = ", "))
+}
+
+
+#-------------------------------------------------------------------------
+##### TABLE X: SDQ MEASUREMENT INVARIANCE SDQ T2 - T5 #####
+#-------------------------------------------------------------------------
+
+table_number <- "SX"
+
+table_title <- paste(
+  "Measurement Model Development and Longitudinal Measurement",
+  "Invariance Testing of the SDQ Externalizing and Emotional",
+  "Problems Factors"
+)
+
+
+##### DEFINE MODELS #####
+
+model_catalog <- tibble::tribble(
+  ~model, ~model_step, ~model_specification,
+  
+  "01_sdq_configural",
+  "Configural model",
+  paste(
+    "Same factor structure across T2 and T5;",
+    "loadings and indicator intercepts freely estimated"
+  ),
+  
+  "02_sdq_longitudinal_resid",
+  "Longitudinal residuals",
+  paste(
+    "Longitudinal residuals",
+    "added across T2 and T5"
+  ),
+  
+  "03_sdq_metric_invariance",
+  "Metric invariance",
+  "Factor loadings constrained to equality across T2 and T5",
+  
+  "04_sdq_within_informant_crossscale",
+  "Within-informant residuals",
+  paste(
+    "Within-informant cross-scale residual covariances",
+    "added and constrained across time"
+  ),
+  
+  "05_sdq_between_informant_residuals",
+  "Final metric model",
+  paste(
+    "Selected between-informant residual covariances",
+    "added and constrained across time"
+  ),
+  
+  "06_sdq_full_scalar_invariance",
+  "Full scalar invariance",
+  paste(
+    "All indicator intercepts constrained to equality;",
+    "T2 latent means fixed to zero and T5 latent means freely estimated"
+  ),
+  
+  "07_sdq_partial_scalar_invariance",
+  "Final partial scalar model",
+  paste(
+    "Child-report emotional-problems indicator intercept",
+    "freely estimated across time; all remaining",
+    "indicator intercepts constrained to equality"
+  )
+)
+
+
+##### LOCATE OUTPUT FILES #####
+
+# runModels() created the outputs beside the Mplus input files
+invariance_output_files <- file.path(
+  mplus_input_dir,
+  paste0(
+    model_catalog$model,
+    ".out"
+  )
+)
+
+missing_output_files <- invariance_output_files[
+  !file.exists(invariance_output_files)
+]
+
+if (length(missing_output_files) > 0) {
+  stop(
+    "The following Mplus output files are missing:\n",
+    paste(missing_output_files, collapse = "\n")
+  )
+}
+
+
+##### EXTRACT MODEL FIT #####
+
+fit_table <- purrr::map_dfr(
+  invariance_output_files,
+  read_mplus_fit
+) |>
+  dplyr::left_join(
+    model_catalog,
+    by = "model"
+  ) |>
+  dplyr::mutate(
+    model_number = match(
+      model,
+      model_catalog$model
+    )
+  ) |>
+  dplyr::arrange(model_number)
+
+if (
+  anyNA(fit_table$model_step) ||
+  anyNA(fit_table$model_specification)
+) {
+  stop("At least one Mplus output could not be matched to the model catalog.")
+}
+
+
+##### DEFINE METRIC REFERENCE MODEL #####
+
+metric_reference <- fit_table |>
+  dplyr::filter(
+    model == "05_sdq_between_informant_residuals"
+  )
+
+if (nrow(metric_reference) != 1) {
+  stop("The metric reference model M5 could not be identified uniquely.")
+}
+
+
+##### PREPARE APA TABLE #####
+
+apa_table_data <- fit_table |>
+  dplyr::mutate(
+    Model = paste0("M", model_number),
+    `Model step` = model_step,
+    `Model specification` = model_specification,
+    N = as.integer(n),
+    `χ²` = sprintf("%.2f", chisq),
+    df = as.integer(df),
+    p = format_p(p),
+    CFI = format_decimal(cfi),
+    TLI = format_decimal(tli),
+    `RMSEA [90% CI]` = format_ci(
+      rmsea,
+      rmsea_lb,
+      rmsea_ub
+    ),
+    SRMR = format_decimal(srmr),
+    cfi_reference = dplyr::case_when(
+      model_number == 1 ~ NA_real_,
+      model_number == 7 ~ metric_reference$cfi[[1]],
+      TRUE ~ dplyr::lag(cfi)
+    ),
+    
+    rmsea_reference = dplyr::case_when(
+      model_number == 1 ~ NA_real_,
+      model_number == 7 ~ metric_reference$rmsea[[1]],
+      TRUE ~ dplyr::lag(rmsea)
+    ),
+    
+    srmr_reference = dplyr::case_when(
+      model_number == 1 ~ NA_real_,
+      model_number == 7 ~ metric_reference$srmr[[1]],
+      TRUE ~ dplyr::lag(srmr)
+    ),
+    
+    `ΔCFI` = dplyr::if_else(
+      is.na(cfi_reference),
+      "—",
+      format_decimal(
+        cfi - cfi_reference,
+        signed = TRUE
+      )
+    ),
+    
+    `ΔRMSEA` = dplyr::if_else(
+      is.na(rmsea_reference),
+      "—",
+      format_decimal(
+        rmsea - rmsea_reference,
+        signed = TRUE
+      )
+    ),
+    
+    `ΔSRMR` = dplyr::if_else(
+      is.na(srmr_reference),
+      "—",
+      format_decimal(
+        srmr - srmr_reference,
+        signed = TRUE
+      )
+    )
+  ) |>
+  dplyr::select(
+    Model,
+    `Model step`,
+    `Model specification`,
+    N,
+    `χ²`,
+    df,
+    p,
+    CFI,
+    TLI,
+    `RMSEA [90% CI]`,
+    SRMR,
+    `ΔCFI`,
+    `ΔRMSEA`,
+    `ΔSRMR`
+  )
+
+
+##### FORMAT TABLE #####
+
+apa_ft <- format_apa_table(
+  data = apa_table_data,
+  left_columns = c(
+    "Model",
+    "Model step",
+    "Model specification"
+  ),
+  widths = c(
+    "Model" = 0.40,
+    "Model step" = 1.15,
+    "Model specification" = 2.65,
+    "N" = 0.45,
+    "χ²" = 0.60,
+    "df" = 0.40,
+    "p" = 0.45,
+    "CFI" = 0.45,
+    "TLI" = 0.45,
+    "RMSEA [90% CI]" = 1.10,
+    "SRMR" = 0.50,
+    "ΔCFI" = 0.50,
+    "ΔRMSEA" = 0.60,
+    "ΔSRMR" = 0.55
+  ),
+  font_size = 8,
+  bold_rows = apa_table_data$Model == "M7"
+)
+
+apa_ft <- flextable::italic(
+  apa_ft,
+  j = c("N", "df", "p"),
+  part = "header"
+)
+
+
+##### SAVE WORD TABLE #####
+
+table_note <- paste(
+  "Chi-square values are robust maximum likelihood (MLR) model test",
+  "statistics. M5 served as the metric reference model for comparisons",
+  "with M6 and M7. In M6 and M7, T2 latent means were fixed to zero and",
+  "T5 latent means were freely estimated. Boldface indicates the retained",
+  "final model. CFI = comparative fit index; TLI = Tucker–Lewis index;",
+  "RMSEA = root mean square error of approximation; CI = confidence",
+  "interval; SRMR = standardized root mean square residual. Dashes",
+  "indicate that change indices were not calculated for the",
+  "model-development steps preceding M5."
+)
+
+table_output_file <- file.path(
+  supplement_dir,
+  paste0(
+    "Table_",
+    table_number,
+    "_SDQ_measurement_invariance_APA.docx"
+  )
+)
+
+save_apa_table(
+  ft = apa_ft,
+  number = table_number,
+  title = table_title,
+  note = table_note,
+  target = table_output_file,
+  landscape = TRUE
+)
+
+
+if (interactive()) {
+  View(apa_table_data)
 }
 
 
@@ -108,182 +388,6 @@ if (!exists("tables_appendix_dir")) {
 dir.create(tables_manuscript_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(tables_appendix_dir, recursive = TRUE, showWarnings = FALSE)
 
-#-----------------------------------------------------------------------
-##### HELPERS #####
-#-----------------------------------------------------------------------
-
-clean_text <- function(x) {
-  toupper(gsub("[^A-Za-z0-9]+", "", trimws(as.character(x))))
-}
-
-resolve_model_path <- function(filenames) {
-
-  paths <- file.path(
-    mplus_input_dir,
-    filenames
-  )
-
-  existing_paths <- paths[
-    file.exists(paths)
-  ]
-
-  if (length(existing_paths) == 0) {
-    stop(
-      "None of the expected Mplus outputs was found:\n",
-      paste(paths, collapse = "\n")
-    )
-  }
-
-  if (length(existing_paths) > 1) {
-    message(
-      "Multiple candidate outputs found; using:\n",
-      existing_paths[1]
-    )
-  }
-
-  existing_paths[1]
-}
-
-
-read_model <- function(filenames) {
-
-  path <- resolve_model_path(
-    filenames
-  )
-
-  model <- MplusAutomation::readModels(
-    path,
-    what = c(
-      "summaries",
-      "parameters",
-      "warn_err"
-    ),
-    quiet = TRUE
-  )
-
-  if (length(model$errors) > 0) {
-    stop(
-      "Mplus errors found in:\n",
-      path,
-      "\n",
-      paste(
-        unlist(model$errors),
-        collapse = "\n"
-      )
-    )
-  }
-
-  attr(model, "source_file") <- path
-
-  model
-}
-
-parameter_table <- function(model) {
-  x <- tibble::as_tibble(model$parameters$unstandardized)
-  names(x) <- tolower(names(x))
-  x |>
-    dplyr::mutate(
-      header_clean = clean_text(.data$paramheader),
-      param_clean = clean_text(.data$param)
-    )
-}
-
-extract_new <- function(model, parameter_name) {
-  pars <- parameter_table(model)
-  match <- pars |>
-    dplyr::filter(
-      grepl("NEW|ADDITIONAL", .data$header_clean),
-      .data$param_clean == clean_text(parameter_name)
-    )
-  if (nrow(match) != 1) {
-    stop("Expected one new parameter ", parameter_name, "; found ", nrow(match))
-  }
-  list(
-    estimate = as.numeric(match$est[1]),
-    se = as.numeric(match$se[1]),
-    p = as.numeric(match$pval[1])
-  )
-}
-
-extract_regression <- function(model, header, predictor) {
-  pars <- parameter_table(model)
-  match <- pars |>
-    dplyr::filter(
-      .data$header_clean == clean_text(header),
-      .data$param_clean == clean_text(predictor)
-    )
-  if (nrow(match) != 1) {
-    stop(
-      "Expected one regression for ", header, " / ", predictor,
-      "; found ", nrow(match)
-    )
-  }
-  list(
-    estimate = as.numeric(match$est[1]),
-    se = as.numeric(match$se[1]),
-    p = as.numeric(match$pval[1])
-  )
-}
-
-format_p <- function(x) {
-  dplyr::case_when(
-    is.na(x) ~ "",
-    x < .001 ~ "< .001",
-    TRUE ~ sub("^0", "", sprintf("%.3f", x))
-  )
-}
-
-format_estimate <- function(b, se) {
-  sprintf("%.2f [%.2f, %.2f]", b, b - 1.96 * se, b + 1.96 * se)
-}
-
-apa_rule <- officer::fp_border(
-  color = "#000000",
-  width = 2.75,
-  style = "single"
-)
-
-format_apa_table <- function(data, left_columns, widths = NULL) {
-  ft <- flextable::flextable(data) |>
-    flextable::font(fontname = "Times New Roman", part = "all") |>
-    flextable::fontsize(size = 10, part = "all") |>
-    flextable::bold(part = "header") |>
-    flextable::align(j = left_columns, align = "left", part = "all") |>
-    flextable::align(
-      j = setdiff(names(data), left_columns),
-      align = "center",
-      part = "all"
-    ) |>
-    flextable::valign(valign = "center", part = "all") |>
-    flextable::padding(
-      padding.top = 3, padding.bottom = 3,
-      padding.left = 3, padding.right = 3,
-      part = "all"
-    ) |>
-    flextable::border_remove() |>
-    flextable::set_table_properties(layout = "fixed", width = 1, align = "left")
-
-  if (!is.null(widths)) {
-    for (column in names(widths)) {
-      ft <- flextable::width(ft, j = column, width = widths[[column]])
-    }
-  }
-
-  ft <- flextable::fix_border_issues(ft)
-  ft <- flextable::hline_top(ft, part = "header", border = apa_rule)
-  ft <- flextable::hline_bottom(ft, part = "header", border = apa_rule)
-  ft <- flextable::hline_bottom(ft, part = "body", border = apa_rule)
-  ft
-}
-
-add_table_to_doc <- function(doc, number, title, ft, note = NULL, page_break = FALSE) {
-  if (page_break) doc <- officer::body_add_break(doc)
-  doc <- officer::body_add_par(doc, number, style = "Normal")
-  doc <- officer::body_add_par(doc, title, style = "Normal")
-  doc <- flextable::body_add_flextable(doc, value = ft)
-  if (!is.null(note)) doc <- officer::body_add_par(doc, note, style = "Normal")
-  doc
-}
 
 #-----------------------------------------------------------------------
 ##### READ FINAL MODELS #####

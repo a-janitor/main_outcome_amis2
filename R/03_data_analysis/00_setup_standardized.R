@@ -167,7 +167,7 @@ github_invariance_dir   <- file.path(github_mplus_dir, "02_invariance")
 github_lcs_dir          <- file.path(github_mplus_dir, "03_lcs")
 github_maltreatment_dir <- file.path(github_mplus_dir, "04_maltreatment")
 github_biology_dir      <- file.path(github_mplus_dir, "05_biology")
-
+model_registry_file     <- file.path(github_mplus_dir, "00_model_registry.csv")
 
 #-----------------------------------------------------------------------
 ##### MPLUS RESULTS DIRECTORIES #####
@@ -188,14 +188,10 @@ mplus_results_sensitivity_dir  <- file.path(mplus_results_dir, "06_sensitivity")
 ##### TABLE AND FIGURE DIRECTORIES #####
 #-----------------------------------------------------------------------
 
-tables_root_dir          <- file.path(mplus_results_dir, "07_tables")
-tables_manuscript_dir    <- file.path(tables_root_dir, "manuscript")
-tables_appendix_dir      <- file.path(tables_root_dir, "appendix")
-figures_root_dir         <- file.path(mplus_results_dir, "08_figures")
-figures_manuscript_dir   <- file.path(figures_root_dir, "manuscript")
-figures_appendix_dir     <- file.path(figures_root_dir, "appendix")
+man_table_dir   <- paste0(main_outcome_dir,"/04_manuscript","/02_Tables")
+man_figure_dir  <- paste0(main_outcome_dir,"/04_manuscript","/01_Figures")
+supplement_dir  <- paste0(main_outcome_dir,"/05_supplement")
 mplus_local_archive_dir  <- file.path(mplus_archive_root, "MAIN_OUTCOME")
-
 
 #-----------------------------------------------------------------------
 ##### BASE MPLUS DATA FILES #####
@@ -317,10 +313,9 @@ output_directories <- c(
   mplus_results_sensitivity_dir,
   mplus_results_inputs_dir,
   mplus_results_outputs_dir,
-  tables_manuscript_dir,
-  tables_appendix_dir,
-  figures_manuscript_dir,
-  figures_appendix_dir,
+  man_table_dir,
+  man_figure_dir,
+  supplement_dir,
   mplus_local_archive_dir,
   m18b_class_checks_dir_mo,
   m18b_lcs_results_dir_mo,
@@ -430,6 +425,87 @@ format_p_value <- function(p, digits = 3) {
   )
   
   result
+}
+
+
+register_mplus_model <- function(filename, documentation) {
+  required_fields <- c(
+    "model_id", "model_name", "model_family", "script", "sample",
+    "estimator", "specification", "residual_covariances",
+    "covariates", "model_role", "notes"
+  )
+  
+  missing_fields <- setdiff(required_fields, names(documentation))
+  
+  if (length(missing_fields)) {
+    stop(
+      "Missing documentation field(s): ",
+      paste(missing_fields, collapse = ", "),
+      call. = FALSE
+    )
+  }
+  
+  valid_fields <- vapply(
+    documentation[required_fields],
+    \(x) is.character(x) && length(x) == 1L && !is.na(x),
+    logical(1)
+  )
+  
+  if (!all(valid_fields)) {
+    stop("Every documentation field must contain one character value.", call. = FALSE)
+  }
+  
+  entry <- documentation[required_fields]
+  entry <- append(entry, list(input_file = filename), after = 3L)
+  entry <- tibble::as_tibble(entry)
+  
+  if (file.exists(model_registry_file)) {
+    registry <- readr::read_csv(
+      model_registry_file,
+      col_types = readr::cols(.default = "c"),
+      show_col_types = FALSE
+    )
+    
+    if (!setequal(names(registry), names(entry))) {
+      stop("Model registry has unexpected columns.", call. = FALSE)
+    }
+    
+    registry <- registry |>
+      dplyr::select(dplyr::all_of(names(entry))) |>
+      dplyr::filter(.data$model_id != entry$model_id)
+  } else {
+    registry <- entry[0, ]
+  }
+  
+  registry <- registry |>
+    dplyr::bind_rows(entry) |>
+    dplyr::arrange(
+      readr::parse_number(.data$model_id),
+      .data$model_id
+    )
+  
+  readr::write_csv(registry, model_registry_file, na = "")
+  
+  invisible(entry)
+}
+
+
+write_mplus_input <- function(
+    syntax,
+    filename,
+    github_dir,
+    documentation = NULL
+) {
+  input_file <- file.path(mplus_input_dir, filename)
+  
+  writeLines(syntax, input_file)
+  copy_file_checked(input_file, file.path(github_dir, filename))
+  
+  if (!is.null(documentation)) {
+    register_mplus_model(filename, documentation)
+  }
+  
+  invisible(input_file)
 }
 
 

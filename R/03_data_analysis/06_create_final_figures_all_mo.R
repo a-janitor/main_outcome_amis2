@@ -6,6 +6,272 @@ source(
   "C:/Users/keil/Documents/main_outcome_amis2/R/03_data_analysis/00_setup_standardized.R"
 )
 
+required_packages <- c(
+  "MplusAutomation",
+  "dplyr",
+  "tibble",
+  "ggplot2"
+)
+
+missing_packages <- required_packages[
+  !vapply(
+    required_packages,
+    requireNamespace,
+    logical(1),
+    quietly = TRUE
+  )
+]
+
+if (length(missing_packages) > 0) {
+  stop(
+    "Install first: ",
+    paste(
+      missing_packages,
+      collapse = ", "
+    )
+  )
+}
+
+
+#-------------------------------------------------------------------------
+##### FIGURE X: LATENT CHANGE FROM T2 TO T5 #####
+#-------------------------------------------------------------------------
+
+figure_number <- "X"
+
+
+##### READ M8 OUTPUT #####
+
+m8_output_file <- file.path(
+  mplus_input_dir,
+  "08_sdq_classical_lcs.out"
+)
+
+if (!file.exists(m8_output_file)) {
+  stop(
+    "The M8 output file is missing:\n",
+    m8_output_file
+  )
+}
+
+m8_model <- MplusAutomation::readModels(
+  m8_output_file,
+  quiet = TRUE
+)
+
+m8_parameters <- m8_model$parameters$unstandardized
+
+
+##### EXTRACT LATENT CHANGE MEANS #####
+
+change_mean_rows <- m8_parameters |>
+  dplyr::filter(
+    toupper(trimws(as.character(paramHeader))) == "MEANS",
+    toupper(trimws(as.character(param))) %in% c(
+      "D_EXT",
+      "D_EMO"
+    )
+  )
+
+if (
+  nrow(change_mean_rows) != 2 ||
+  dplyr::n_distinct(
+    toupper(trimws(as.character(change_mean_rows$param)))
+  ) != 2
+) {
+  stop(
+    paste(
+      "The latent change means for d_ext and d_emo",
+      "could not be identified uniquely in M8."
+    )
+  )
+}
+
+change_means <- change_mean_rows |>
+  dplyr::transmute(
+    outcome = dplyr::recode(
+      toupper(trimws(as.character(param))),
+      "D_EXT" = "Externalizing problems",
+      "D_EMO" = "Emotional problems"
+    ),
+    estimate = as.numeric(est),
+    se = as.numeric(se),
+    ci_lower = estimate - 1.96 * se,
+    ci_upper = estimate + 1.96 * se
+  )
+
+
+##### PREPARE TRAJECTORY DATA #####
+
+trajectory_data <- dplyr::bind_rows(
+  change_means |>
+    dplyr::transmute(
+      outcome,
+      time = 0,
+      estimate = 0,
+      ci_lower = 0,
+      ci_upper = 0
+    ),
+  
+  change_means |>
+    dplyr::transmute(
+      outcome,
+      time = 1,
+      estimate,
+      ci_lower,
+      ci_upper
+    )
+) |>
+  dplyr::mutate(
+    outcome = factor(
+      outcome,
+      levels = c(
+        "Externalizing problems",
+        "Emotional problems"
+      )
+    )
+  ) |>
+  dplyr::arrange(
+    outcome,
+    time
+  )
+
+
+##### CREATE FIGURE #####
+
+m8_figure <- ggplot2::ggplot(
+  trajectory_data,
+  ggplot2::aes(
+    x = time,
+    y = estimate,
+    color = outcome,
+    fill = outcome,
+    group = outcome
+  )
+) +
+  ggplot2::geom_hline(
+    yintercept = 0,
+    linetype = "dashed",
+    linewidth = 0.45,
+    color = "grey55"
+  ) +
+  ggplot2::geom_ribbon(
+    ggplot2::aes(
+      ymin = ci_lower,
+      ymax = ci_upper
+    ),
+    alpha = 0.18,
+    color = NA,
+    show.legend = FALSE
+  ) +
+  ggplot2::geom_line(
+    linewidth = 1.15
+  ) +
+  ggplot2::geom_point(
+    size = 3
+  ) +
+  ggplot2::scale_x_continuous(
+    breaks = c(0, 1),
+    labels = c(
+      "BASELINE T1",
+      "FOLLOW-UP T2"
+    ),
+    expand = ggplot2::expansion(
+      mult = c(0.05, 0.05)
+    )
+  ) +
+  ggplot2::scale_y_continuous(
+    breaks = seq(-1, 1, by = 0.25)
+  ) +
+  ggplot2::coord_cartesian(
+    ylim = c(-1, 1)
+  ) +
+  ggplot2::scale_color_manual(
+    values = c(
+      "Externalizing problems" = "#0072B2",
+      "Emotional problems" = "#D55E00"
+    ),
+    labels = c(
+      "EXTERNALIZING PROBLEMS",
+      "EMOTIONAL PROBLEMS"
+    )
+  ) +
+  ggplot2::scale_fill_manual(
+    values = c(
+      "Externalizing problems" = "#0072B2",
+      "Emotional problems" = "#D55E00"
+    ),
+    labels = c(
+      "EXTERNALIZING PROBLEMS",
+      "EMOTIONAL PROBLEMS"
+    )
+  ) +
+  ggplot2::labs(
+    x = NULL,
+    y = "ESTIMATED LATENT CHANGE",
+    color = NULL,
+    fill = NULL
+  ) +
+  ggplot2::theme_classic(
+    base_size = 11,
+    base_family = "Times New Roman"
+  ) +
+  ggplot2::theme(
+    axis.text.x = ggplot2::element_text(
+      face = "bold"
+    ),
+    axis.title.y = ggplot2::element_text(
+      face = "bold",
+      margin = ggplot2::margin(r = 8)
+    ),
+    legend.position = "inside",
+    legend.position.inside = c(0.72, 0.88),
+    legend.justification = c(0.5, 0.5),
+    legend.background = ggplot2::element_rect(
+      fill = scales::alpha("white", 0.75),
+      color = NA
+    ),
+    plot.margin = ggplot2::margin(
+      t = 10,
+      r = 12,
+      b = 8,
+      l = 8
+    )
+  )
+
+
+
+##### SAVE FIGURE #####
+
+dir.create(
+  man_figure_dir,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+figure_output_file <- file.path(
+  man_figure_dir,
+  paste0(
+    "Figure_",
+    figure_number,
+    "_SDQ_latent_change_T2_T5.tiff"
+  )
+)
+
+ggplot2::ggsave(
+  filename = figure_output_file,
+  plot = m8_figure,
+  width = 7,
+  height = 4.5,
+  units = "in",
+  dpi = 600,
+  compression = "lzw",
+  bg = "white"
+)
+
+if (interactive()) {
+  print(m8_figure)
+}
 
 #-----------------------------------------------------------------------
 ##### SELECT CLASSIFICATION VARIANT #####
