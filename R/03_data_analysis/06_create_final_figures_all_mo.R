@@ -273,6 +273,30 @@ if (interactive()) {
   print(m8_figure)
 }
 
+#--------------------------------------------------------------
+###### PLOT LATENT TRAJECTORY CLASSES ###################
+#--------------------------------------------------------------
+
+##### DEFINE TRAJECTORY GRID FOR M18 CONFIDENCE BANDS ####
+
+trajectory_grid_points_m18 <- 81L
+
+trajectory_time_grid_m18 <- seq(
+  from = min(
+    developmental_time_scores
+  ),
+  to = max(
+    developmental_time_scores
+  ),
+  length.out = trajectory_grid_points_m18
+)
+
+stopifnot(
+  length(trajectory_time_grid_m18) ==
+    trajectory_grid_points_m18,
+  all(is.finite(trajectory_time_grid_m18))
+)
+
 #-----------------------------------------------------------------------
 ##### SELECT CLASSIFICATION VARIANT #####
 #-----------------------------------------------------------------------

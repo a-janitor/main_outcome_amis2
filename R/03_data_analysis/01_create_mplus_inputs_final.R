@@ -2160,145 +2160,135 @@ if (isTRUE(run_mplus_models)) {
     "was skipped because run_mplus_models is FALSE."
   )
 }
+
 #---------------------------------------------------------------------
 ##### M15: JOINT QUADRATIC PARALLEL-PROCESS MODEL ####
 #---------------------------------------------------------------------
-##### DEFINE JOINT GROWTH FACTORS ####
-joint_growth_factors <- c(
-  "sub_i",
-  "sub_s",
-  "sub_q",
-  "fq_i",
-  "fq_s",
-  "fq_q",
-  "sev_i",
-  "sev_s",
-  "sev_q"
+##### DEFINE PARALLEL GROWTH PROCESSES ####
+
+m15_growth_processes <- list(
+  multiplicity = list(
+    label = "maltreatment multiplicity",
+    growth_factors = c(
+      "sub_i",
+      "sub_s",
+      "sub_q"
+    ),
+    observed_variables = subtype_variables
+  ),
+  
+  frequency = list(
+    label = "maltreatment frequency",
+    growth_factors = c(
+      "fq_i",
+      "fq_s",
+      "fq_q"
+    ),
+    observed_variables = frequency_variables
+  ),
+  
+  severity = list(
+    label = "maltreatment severity",
+    growth_factors = c(
+      "sev_i",
+      "sev_s",
+      "sev_q"
+    ),
+    observed_variables = severity_variables
+  )
 )
 
+
+##### EXTRACT JOINT MODEL ELEMENTS ####
+
+joint_growth_factors <- unlist(
+  lapply(
+    m15_growth_processes,
+    `[[`,
+    "growth_factors"
+  ),
+  use.names = FALSE
+)
+
+joint_observed_variables <- unlist(
+  lapply(
+    m15_growth_processes,
+    `[[`,
+    "observed_variables"
+  ),
+  use.names = FALSE
+)
+
+
+##### CHECK M15 SPECIFICATION ####
+
 stopifnot(
+  length(m15_growth_processes) == 3,
+  
+  all(
+    vapply(
+      m15_growth_processes,
+      function(process) {
+        length(process$growth_factors) == 3
+      },
+      logical(1)
+    )
+  ),
+  
+  all(
+    vapply(
+      m15_growth_processes,
+      function(process) {
+        length(process$observed_variables) ==
+          length(developmental_time_scores)
+      },
+      logical(1)
+    )
+  ),
+  
   length(developmental_time_scores) == 7,
   all(is.finite(developmental_time_scores)),
-  all(trajectory_variables %in% mplus_names),
+  
+  identical(
+    joint_observed_variables,
+    trajectory_variables
+  ),
+  
+  all(joint_observed_variables %in% mplus_names),
+  anyDuplicated(joint_observed_variables) == 0,
+  
+  length(joint_growth_factors) == 9,
   all(nchar(joint_growth_factors) <= 8),
   anyDuplicated(joint_growth_factors) == 0
 )
 
 
-##### DEFINE GROWTH-PROCESS SYNTAX FUNCTION ####
+##### CREATE PARALLEL GROWTH-PROCESS SYNTAX ####
 
-create_growth_process_syntax <- function(
-    growth_factors,
-    observed_variables,
-    time_scores
-) {
-  
-  stopifnot(
-    length(growth_factors) == 3,
-    length(observed_variables) == length(time_scores),
-    all(is.finite(time_scores)),
-    all(observed_variables %in% mplus_names)
-  )
-  
-  formatted_time_scores <- vapply(
-    time_scores,
-    format_mplus_number,
-    character(1)
-  )
-  
-  paste0(
-    "  ",
-    paste(
-      growth_factors,
-      collapse = " "
-    ),
-    " |\n",
-    paste0(
-      "    ",
-      observed_variables,
-      "@",
-      formatted_time_scores,
-      collapse = "\n"
-    ),
-    ";"
-  )
-}
-
-
-##### DEFINE COMPLETE COVARIANCE SYNTAX FUNCTION ####
-
-create_all_covariances_syntax <- function(
-    variable_names
-) {
-  
-  stopifnot(
-    length(variable_names) >= 2,
-    anyDuplicated(variable_names) == 0
-  )
-  
-  covariance_lines <- vapply(
-    seq_len(
-      length(variable_names) - 1
-    ),
-    function(position) {
+growth_processes_syntax <- paste(
+  vapply(
+    m15_growth_processes,
+    function(process) {
       
       paste0(
-        "  ",
-        variable_names[position],
-        " WITH ",
-        paste(
-          variable_names[
-            (position + 1):length(variable_names)
-          ],
-          collapse = " "
-        ),
-        ";"
+        "  ! Quadratic growth process for ",
+        process$label,
+        "\n",
+        
+        create_growth_process_syntax(
+          growth_factors = process$growth_factors,
+          observed_variables = process$observed_variables,
+          time_scores = developmental_time_scores
+        )
       )
     },
     character(1)
-  )
-  
-  paste(
-    covariance_lines,
-    collapse = "\n"
-  )
-}
-
-
-##### CREATE THREE QUADRATIC GROWTH PROCESSES ####
-
-subtype_growth_syntax <- create_growth_process_syntax(
-  growth_factors = c(
-    "sub_i",
-    "sub_s",
-    "sub_q"
   ),
-  observed_variables = subtype_variables,
-  time_scores = developmental_time_scores
-)
-
-frequency_growth_syntax <- create_growth_process_syntax(
-  growth_factors = c(
-    "fq_i",
-    "fq_s",
-    "fq_q"
-  ),
-  observed_variables = frequency_variables,
-  time_scores = developmental_time_scores
-)
-
-severity_growth_syntax <- create_growth_process_syntax(
-  growth_factors = c(
-    "sev_i",
-    "sev_s",
-    "sev_q"
-  ),
-  observed_variables = severity_variables,
-  time_scores = developmental_time_scores
+  collapse = "\n\n"
 )
 
 
-##### CREATE COVARIANCES AMONG ALL GROWTH FACTORS ####
+##### CREATE ALL GROWTH-FACTOR COVARIANCES ####
 
 growth_covariances_syntax <-
   create_all_covariances_syntax(
@@ -2306,21 +2296,41 @@ growth_covariances_syntax <-
   )
 
 
+##### CREATE WITHIN-PERIOD INDICATOR MATRIX ####
+
+process_indicator_matrix <- do.call(
+  cbind,
+  lapply(
+    m15_growth_processes,
+    `[[`,
+    "observed_variables"
+  )
+)
+
+stopifnot(
+  is.matrix(process_indicator_matrix),
+  nrow(process_indicator_matrix) ==
+    length(developmental_time_scores),
+  ncol(process_indicator_matrix) ==
+    length(m15_growth_processes)
+)
+
+
 ##### CREATE WITHIN-PERIOD RESIDUAL COVARIANCES ####
 
 within_period_residual_syntax <- paste(
   vapply(
-    seq_along(
-      subtype_variables
+    seq_len(
+      nrow(process_indicator_matrix)
     ),
     function(position) {
       
       create_all_covariances_syntax(
-        c(
-          subtype_variables[position],
-          frequency_variables[position],
-          severity_variables[position]
-        )
+        process_indicator_matrix[
+          position,
+          ,
+          drop = TRUE
+        ]
       )
     },
     character(1)
@@ -2329,18 +2339,18 @@ within_period_residual_syntax <- paste(
 )
 
 
-##### CREATE JOINT USEVARIABLES SYNTAX ####
+##### CREATE USEVARIABLES SYNTAX ####
 
 joint_usevariables_syntax <- paste(
   wrap_mplus_names(
-    trajectory_variables,
+    joint_observed_variables,
     max_width = 88
   ),
   collapse = "\n"
 )
 
 
-##### CREATE M15 INPUT SYNTAX ####
+##### DEFINE MPLUS DATA FILE ####
 
 mplus_data_name <- basename(
   mplus_data_file
@@ -2351,6 +2361,9 @@ stopifnot(
   length(mplus_data_name) == 1,
   nzchar(mplus_data_name)
 )
+
+
+##### CREATE M15 INPUT SYNTAX ####
 
 input_syntax_m15 <- paste0(
   "TITLE:\n",
@@ -2379,14 +2392,7 @@ input_syntax_m15 <- paste0(
   "  ESTIMATOR = MLR;\n\n",
   
   "MODEL:\n",
-  "  ! Quadratic growth process for maltreatment multiplicity\n",
-  subtype_growth_syntax, "\n\n",
-  
-  "  ! Quadratic growth process for maltreatment frequency\n",
-  frequency_growth_syntax, "\n\n",
-  
-  "  ! Quadratic growth process for maltreatment severity\n",
-  severity_growth_syntax, "\n\n",
+  growth_processes_syntax, "\n\n",
   
   "  ! Growth-factor means\n",
   "  [",
@@ -2486,19 +2492,22 @@ write_mplus_input(
   )
 )
 
+
+##### DEFINE AND CHECK M15 INPUT FILE ####
+
 input_file_m15 <- file.path(
   mplus_input_dir,
   m15_filename
 )
 
+github_input_file_m15 <- file.path(
+  github_maltreatment_dir,
+  m15_filename
+)
+
 stopifnot(
   file.exists(input_file_m15),
-  file.exists(
-    file.path(
-      github_maltreatment_dir,
-      m15_filename
-    )
-  )
+  file.exists(github_input_file_m15)
 )
 
 message(
@@ -2506,8 +2515,8 @@ message(
   input_file_m15
 )
 
-##### RUN M15 #####
 
+##### DEFINE M15 OUTPUT FILE ####
 
 m15_output_file <- paste0(
   tools::file_path_sans_ext(
@@ -2516,19 +2525,23 @@ m15_output_file <- paste0(
   ".out"
 )
 
+
+##### RECORD PREVIOUS OUTPUT TIME ####
+
 previous_output_mtime <- if (
-  file.exists(
-    m15_output_file
-  )
+  file.exists(m15_output_file)
 ) {
+  
   file.info(
     m15_output_file
   )$mtime
+  
 } else {
-  as.POSIXct(
-    NA
-  )
+  
+  as.POSIXct(NA)
 }
+
+##### RUN M15 ####
 
 if (isTRUE(run_mplus_models)) {
   
@@ -2537,6 +2550,7 @@ if (isTRUE(run_mplus_models)) {
       silent = FALSE
     ) != 0
   ) {
+    
     stop(
       "Mplus could not be detected by MplusAutomation."
     )
@@ -2544,9 +2558,7 @@ if (isTRUE(run_mplus_models)) {
   
   message(
     "Running M15: ",
-    basename(
-      input_file_m15
-    )
+    basename(input_file_m15)
   )
   
   MplusAutomation::runModels(
@@ -2557,12 +2569,19 @@ if (isTRUE(run_mplus_models)) {
     quiet = FALSE
   )
   
+  
+  ##### CHECK WHETHER OUTPUT WAS CREATED ####
+  
   if (!file.exists(m15_output_file)) {
+    
     stop(
       "M15 did not create the expected output:\n",
       m15_output_file
     )
   }
+  
+  
+  ##### CHECK WHETHER OUTPUT WAS UPDATED ####
   
   current_output_mtime <- file.info(
     m15_output_file
@@ -2572,31 +2591,39 @@ if (isTRUE(run_mplus_models)) {
     !is.na(previous_output_mtime) &&
     current_output_mtime <= previous_output_mtime
   ) {
+    
     stop(
       "The existing M15 output was not updated:\n",
       m15_output_file
     )
   }
   
+  
+  ##### CHECK NORMAL MODEL TERMINATION ####
+  
   m15_output_text <- readLines(
     m15_output_file,
     warn = FALSE
   )
   
-  if (
-    !any(
-      grepl(
-        "THE MODEL ESTIMATION TERMINATED NORMALLY",
-        m15_output_text,
-        fixed = TRUE
-      )
+  model_terminated_normally <- any(
+    grepl(
+      "THE MODEL ESTIMATION TERMINATED NORMALLY",
+      m15_output_text,
+      fixed = TRUE
     )
-  ) {
+  )
+  
+  if (!model_terminated_normally) {
+    
     stop(
       "M15 created an output file but did not terminate normally:\n",
       m15_output_file
     )
   }
+  
+  
+  ##### REPORT SUCCESSFUL EXECUTION ####
   
   message(
     "M15 completed successfully; output updated at ",
@@ -2612,6 +2639,1327 @@ if (isTRUE(run_mplus_models)) {
     "M15 input was created, but Mplus execution was skipped."
   )
 }
+
+#---------------------------------------------------------------------
+##### M16: JOINT QUADRATIC PARALLEL-PROCESS MODEL (1 Class) ####
+#---------------------------------------------------------------------
+##### DEFINE MALTREATMENT BURDEN VARIABLES ####
+
+burden_variables <- c(
+  "zind_sa",
+  "zind_kk",
+  "zind_vsa",
+  "zind_fsz",
+  "zind_ssz",
+  "zind_ja",
+  "zind_jea"
+)
+
+burden_growth_factors <- c(
+  "bur_i",
+  "bur_s",
+  "bur_q"
+)
+
+
+##### CHECK M16 SPECIFICATION ####
+
+stopifnot(
+  length(burden_variables) == 7,
+  anyDuplicated(burden_variables) == 0,
+  all(burden_variables %in% mplus_names),
+  
+  length(burden_growth_factors) == 3,
+  anyDuplicated(burden_growth_factors) == 0,
+  all(nchar(burden_growth_factors) <= 8),
+  
+  length(developmental_time_scores) == 7,
+  all(is.finite(developmental_time_scores)),
+  
+  length(trajectory_sample_filter) == 1,
+  nzchar(trajectory_sample_filter),
+  grepl(
+    "^\\s*mal_all\\s+EQ\\s+1\\s*$",
+    trajectory_sample_filter
+  ),
+  
+  length(trajectory_sample_description) == 1,
+  nzchar(trajectory_sample_description),
+  
+  length(time_score_documentation) == 1,
+  nzchar(time_score_documentation)
+)
+
+
+##### CREATE QUADRATIC BURDEN-GROWTH SYNTAX ####
+
+burden_growth_syntax <- create_growth_process_syntax(
+  growth_factors = burden_growth_factors,
+  observed_variables = burden_variables,
+  time_scores = developmental_time_scores
+)
+
+
+##### CREATE GROWTH-FACTOR COVARIANCES ####
+
+burden_covariances_syntax <-
+  create_all_covariances_syntax(
+    burden_growth_factors
+  )
+
+
+##### CREATE USEVARIABLES SYNTAX ####
+
+burden_usevariables_syntax <- paste(
+  wrap_mplus_names(
+    burden_variables,
+    max_width = 88
+  ),
+  collapse = "\n"
+)
+
+
+##### DEFINE MPLUS DATA FILE ####
+
+mplus_data_name <- basename(
+  mplus_data_file
+)
+
+stopifnot(
+  file.exists(mplus_data_file),
+  length(mplus_data_name) == 1,
+  nzchar(mplus_data_name)
+)
+
+
+##### CREATE M16 INPUT SYNTAX ####
+
+input_syntax_m16 <- paste0(
+  "TITLE:\n",
+  "  M16: One-class quadratic growth model for ",
+  "maltreatment burden;\n\n",
+  
+  "DATA:\n",
+  "  FILE = ", mplus_data_name, ";\n\n",
+  
+  "VARIABLE:\n",
+  "  NAMES ARE\n",
+  names_syntax, ";\n\n",
+  
+  "  USEVARIABLES ARE\n",
+  burden_usevariables_syntax, ";\n\n",
+  
+  "  USEOBSERVATIONS ARE ",
+  trajectory_sample_filter,
+  ";\n\n",
+  
+  "  MISSING ARE ALL (-999);\n",
+  "  IDVARIABLE IS SIC_N;\n\n",
+  
+  "ANALYSIS:\n",
+  "  TYPE = GENERAL;\n",
+  "  ESTIMATOR = MLR;\n\n",
+  
+  "MODEL:\n",
+  "  ! Quadratic growth process for maltreatment burden\n",
+  burden_growth_syntax, "\n\n",
+  
+  "  ! Growth-factor means\n",
+  "  [",
+  paste(
+    burden_growth_factors,
+    collapse = " "
+  ),
+  "];\n\n",
+  
+  "  ! Growth-factor variances\n",
+  "  ",
+  paste(
+    burden_growth_factors,
+    collapse = " "
+  ),
+  ";\n\n",
+  
+  "  ! Covariances among growth factors\n",
+  burden_covariances_syntax, "\n\n",
+  
+  "OUTPUT:\n",
+  "  SAMPSTAT;\n",
+  "  STANDARDIZED;\n",
+  "  RESIDUAL;\n",
+  "  CINTERVAL;\n",
+  "  MODINDICES(10);\n",
+  "  TECH1;\n",
+  "  TECH4;\n"
+)
+
+
+##### WRITE AND DOCUMENT M16 INPUT ####
+
+m16_filename <- "16_mt_burden_quadratic_1class.inp"
+
+write_mplus_input(
+  syntax = input_syntax_m16,
+  filename = m16_filename,
+  github_dir = github_maltreatment_dir,
+  
+  documentation = list(
+    model_id = "M16",
+    
+    model_name = paste(
+      "One-class quadratic growth model",
+      "for maltreatment burden"
+    ),
+    
+    model_family = "Latent growth curve model",
+    
+    script = "02_create_mplus_inputs_LTC.R",
+    
+    sample = trajectory_sample_description,
+    
+    estimator = "MLR",
+    
+    specification = paste(
+      "One-class quadratic latent growth model for the",
+      "period-specific maltreatment burden index;",
+      "seven standardized burden indicators cover",
+      "infancy through young adulthood;",
+      "latent intercept, linear slope, and quadratic",
+      "growth factors are freely estimated"
+    ),
+    
+    time_scores = time_score_documentation,
+    
+    residual_covariances = "None",
+    
+    covariates = "None",
+    
+    model_role = paste(
+      "Final one-class reference model for the composite",
+      "maltreatment burden trajectory before estimating",
+      "the two-, three-, and four-class trajectory models"
+    ),
+    
+    notes = paste(
+      "The burden indicators integrate standardized",
+      "maltreatment multiplicity, frequency, and severity",
+      "within each developmental period;",
+      "all three growth-factor means, variances, and",
+      "pairwise covariances are freely estimated;",
+      "the intercept represents the expected burden level",
+      "at the centered developmental age;",
+      "one unit of developmental time corresponds to",
+      time_scale_years,
+      "years"
+    )
+  )
+)
+
+
+##### DEFINE AND CHECK M16 INPUT FILE ####
+
+input_file_m16 <- file.path(
+  mplus_input_dir,
+  m16_filename
+)
+
+github_input_file_m16 <- file.path(
+  github_maltreatment_dir,
+  m16_filename
+)
+
+stopifnot(
+  file.exists(input_file_m16),
+  file.exists(github_input_file_m16)
+)
+
+message(
+  "Created: ",
+  input_file_m16
+)
+
+
+##### DEFINE M16 OUTPUT FILE ####
+
+m16_output_file <- paste0(
+  tools::file_path_sans_ext(
+    input_file_m16
+  ),
+  ".out"
+)
+
+
+##### RECORD PREVIOUS OUTPUT TIME ####
+
+previous_output_mtime_m16 <- if (
+  file.exists(m16_output_file)
+) {
+  
+  file.info(
+    m16_output_file
+  )$mtime
+  
+} else {
+  
+  as.POSIXct(NA)
+}
+
+
+##### RUN M16 ####
+
+if (isTRUE(run_mplus_models)) {
+  
+  if (
+    MplusAutomation::mplusAvailable(
+      silent = FALSE
+    ) != 0
+  ) {
+    
+    stop(
+      "Mplus could not be detected by MplusAutomation."
+    )
+  }
+  
+  message(
+    "Running M16: ",
+    basename(input_file_m16)
+  )
+  
+  MplusAutomation::runModels(
+    target = input_file_m16,
+    replaceOutfile = "always",
+    showOutput = TRUE,
+    logFile = NULL,
+    quiet = FALSE
+  )
+  
+  
+  ##### CHECK WHETHER OUTPUT WAS CREATED ####
+  
+  if (!file.exists(m16_output_file)) {
+    
+    stop(
+      "M16 did not create the expected output:\n",
+      m16_output_file
+    )
+  }
+  
+  
+  ##### CHECK WHETHER OUTPUT WAS UPDATED ####
+  
+  current_output_mtime_m16 <- file.info(
+    m16_output_file
+  )$mtime
+  
+  if (
+    !is.na(previous_output_mtime_m16) &&
+    current_output_mtime_m16 <= previous_output_mtime_m16
+  ) {
+    
+    stop(
+      "The existing M16 output was not updated:\n",
+      m16_output_file
+    )
+  }
+  
+  
+  ##### CHECK NORMAL MODEL TERMINATION ####
+  
+  m16_output_text <- readLines(
+    m16_output_file,
+    warn = FALSE
+  )
+  
+  model_terminated_normally_m16 <- any(
+    grepl(
+      "THE MODEL ESTIMATION TERMINATED NORMALLY",
+      m16_output_text,
+      fixed = TRUE
+    )
+  )
+  
+  if (!model_terminated_normally_m16) {
+    
+    stop(
+      "M16 created an output file but did not terminate normally:\n",
+      m16_output_file
+    )
+  }
+  
+  
+  ##### REPORT SUCCESSFUL EXECUTION ####
+  
+  message(
+    "M16 completed successfully; output updated at ",
+    format(
+      current_output_mtime_m16,
+      "%Y-%m-%d %H:%M:%S"
+    )
+  )
+  
+} else {
+  
+  message(
+    "M16 input was created, but Mplus execution was skipped."
+  )
+}
+
+
+
+#---------------------------------------------------------------------
+##### M17-M19: JOINT QUADRATIC PARALLEL-PROCESS MODEL (2-4 Classes) ####
+#---------------------------------------------------------------------
+##### CHECK COMMON BURDEN-MODEL ELEMENTS ####
+
+stopifnot(
+  exists("burden_variables"),
+  exists("burden_growth_factors"),
+  
+  length(burden_variables) == 7,
+  anyDuplicated(burden_variables) == 0,
+  all(burden_variables %in% mplus_names),
+  all(nchar(burden_variables) <= 8),
+  
+  identical(
+    burden_growth_factors,
+    c(
+      "bur_i",
+      "bur_s",
+      "bur_q"
+    )
+  ),
+  anyDuplicated(burden_growth_factors) == 0,
+  all(nchar(burden_growth_factors) <= 8),
+  
+  length(developmental_time_scores) == 7,
+  all(is.finite(developmental_time_scores)),
+  
+  length(trajectory_sample_filter) == 1,
+  nzchar(trajectory_sample_filter),
+  grepl(
+    "^\\s*mal_all\\s+EQ\\s+1\\s*$",
+    trajectory_sample_filter
+  ),
+  
+  length(trajectory_sample_description) == 1,
+  nzchar(trajectory_sample_description),
+  
+  length(time_score_documentation) == 1,
+  nzchar(time_score_documentation)
+)
+
+
+##### CREATE COMMON BURDEN-GROWTH SYNTAX ####
+
+burden_growth_syntax <- create_growth_process_syntax(
+  growth_factors = burden_growth_factors,
+  observed_variables = burden_variables,
+  time_scores = developmental_time_scores
+)
+
+
+##### CREATE COMMON GROWTH-FACTOR COVARIANCES ####
+
+burden_covariances_syntax <-
+  create_all_covariances_syntax(
+    burden_growth_factors
+  )
+
+
+##### CREATE COMMON USEVARIABLES SYNTAX ####
+
+burden_usevariables_syntax <- paste(
+  wrap_mplus_names(
+    burden_variables,
+    max_width = 88
+  ),
+  collapse = "\n"
+)
+
+
+##### DEFINE MPLUS DATA FILE ####
+
+mplus_data_name <- basename(
+  mplus_data_file
+)
+
+stopifnot(
+  file.exists(mplus_data_file),
+  length(mplus_data_name) == 1,
+  nzchar(mplus_data_name)
+)
+
+
+##### DEFINE MIXTURE-MODEL START SETTINGS ####
+
+mixture_starts_initial <- 4000L
+mixture_starts_final <- 1000L
+
+mixture_lrt_starts <- c(
+  0L,
+  0L,
+  1000L,
+  250L
+)
+
+mixture_stiterations <- 20L
+
+stopifnot(
+  mixture_starts_initial > 0,
+  mixture_starts_final > 0,
+  mixture_starts_initial > mixture_starts_final,
+  length(mixture_lrt_starts) == 4,
+  all(mixture_lrt_starts >= 0),
+  mixture_stiterations > 0
+)
+
+##### DEFINE TRAJECTORY GRID FOR M18 CONFIDENCE BANDS ####
+
+trajectory_grid_points_m18 <- 81L
+
+trajectory_time_grid_m18 <- seq(
+  from = min(
+    developmental_time_scores
+  ),
+  to = max(
+    developmental_time_scores
+  ),
+  length.out = trajectory_grid_points_m18
+)
+
+stopifnot(
+  length(trajectory_time_grid_m18) ==
+    trajectory_grid_points_m18,
+  all(is.finite(trajectory_time_grid_m18))
+)
+
+
+##### DEFINE BURDEN-MIXTURE INPUT FUNCTION #####
+
+create_burden_mixture_input <- function(
+    model_number,
+    number_of_classes,
+    model_role
+) {
+  
+  stopifnot(
+    length(model_number) == 1,
+    length(number_of_classes) == 1,
+    length(model_role) == 1,
+    
+    model_number %in% 17:19,
+    number_of_classes %in% 2:4,
+    model_number == number_of_classes + 15,
+    
+    nzchar(model_role)
+  )
+  
+  
+  ##### DEFINE MODEL LABELS ####
+  
+  model_id <- paste0(
+    "M",
+    model_number
+  )
+  
+  class_word <- unname(
+    c(
+      `2` = "Two",
+      `3` = "Three",
+      `4` = "Four"
+    )[
+      as.character(number_of_classes)
+    ]
+  )
+  
+  class_word_lower <- tolower(
+    class_word
+  )
+  
+  
+  ##### CREATE LABELED CLASS-SPECIFIC MEAN SYNTAX ####
+  
+  class_specific_means_syntax <- paste(
+    vapply(
+      seq_len(
+        number_of_classes
+      ),
+      function(class_number) {
+        
+        paste0(
+          "  %c#",
+          class_number,
+          "%\n",
+          
+          "  [",
+          burden_growth_factors[1],
+          "] (bi",
+          class_number,
+          ");\n",
+          
+          "  [",
+          burden_growth_factors[2],
+          "] (bs",
+          class_number,
+          ");\n",
+          
+          "  [",
+          burden_growth_factors[3],
+          "] (bq",
+          class_number,
+          ");"
+        )
+      },
+      character(1)
+    ),
+    collapse = "\n\n"
+  )
+  
+  
+  ##### CREATE M18 TRAJECTORY CONSTRAINTS ####
+  
+  if (model_number == 18L) {
+    
+    trajectory_constraint_names <- unlist(
+      lapply(
+        seq_len(
+          number_of_classes
+        ),
+        function(class_number) {
+          
+          paste0(
+            "c",
+            class_number,
+            "p",
+            sprintf(
+              "%03d",
+              seq_along(
+                trajectory_time_grid_m18
+              )
+            )
+          )
+        }
+      ),
+      use.names = FALSE
+    )
+    
+    trajectory_constraint_definitions <- unlist(
+      lapply(
+        seq_len(
+          number_of_classes
+        ),
+        function(class_number) {
+          
+          vapply(
+            seq_along(
+              trajectory_time_grid_m18
+            ),
+            function(grid_number) {
+              
+              time_score <- trajectory_time_grid_m18[
+                grid_number
+              ]
+              
+              paste0(
+                "  c",
+                class_number,
+                "p",
+                sprintf(
+                  "%03d",
+                  grid_number
+                ),
+                " = bi",
+                class_number,
+                " + bs",
+                class_number,
+                " * (",
+                formatC(
+                  time_score,
+                  format = "f",
+                  digits = 8
+                ),
+                ") + bq",
+                class_number,
+                " * (",
+                formatC(
+                  time_score^2,
+                  format = "f",
+                  digits = 8
+                ),
+                ");"
+              )
+            },
+            character(1)
+          )
+        }
+      ),
+      use.names = FALSE
+    )
+    
+    trajectory_model_constraint_syntax <- paste0(
+      "MODEL CONSTRAINT:\n",
+      
+      paste0(
+        "  NEW(",
+        trajectory_constraint_names,
+        ");",
+        collapse = "\n"
+      ),
+      "\n\n",
+      
+      paste(
+        trajectory_constraint_definitions,
+        collapse = "\n"
+      ),
+      "\n\n"
+    )
+    
+  } else {
+    
+    trajectory_model_constraint_syntax <- ""
+  }
+  
+  
+  ##### DEFINE FILE NAMES ####
+  
+  input_filename <- paste0(
+    sprintf(
+      "%02d",
+      model_number
+    ),
+    "_mt_burden_quadratic_",
+    number_of_classes,
+    "class.inp"
+  )
+  
+  savedata_filename <- paste0(
+    sprintf(
+      "%02d",
+      model_number
+    ),
+    "_mt_burden_quadratic_",
+    number_of_classes,
+    "class_cprob.dat"
+  )
+  
+  
+  ##### CREATE MPLUS INPUT SYNTAX ####
+  
+  input_syntax <- paste0(
+    "TITLE:\n",
+    "  ",
+    model_id,
+    ": ",
+    class_word,
+    "-class quadratic growth mixture model for ",
+    "maltreatment burden;\n\n",
+    
+    "DATA:\n",
+    "  FILE = ",
+    mplus_data_name,
+    ";\n\n",
+    
+    "VARIABLE:\n",
+    "  NAMES ARE\n",
+    names_syntax,
+    ";\n\n",
+    
+    "  USEVARIABLES ARE\n",
+    burden_usevariables_syntax,
+    ";\n\n",
+    
+    "  USEOBSERVATIONS ARE ",
+    trajectory_sample_filter,
+    ";\n\n",
+    
+    "  MISSING ARE ALL (-999);\n",
+    "  IDVARIABLE IS SIC_N;\n",
+    "  CLASSES = c(",
+    number_of_classes,
+    ");\n\n",
+    
+    "ANALYSIS:\n",
+    "  TYPE = MIXTURE;\n",
+    "  ESTIMATOR = MLR;\n",
+    
+    "  STARTS = ",
+    mixture_starts_initial,
+    " ",
+    mixture_starts_final,
+    ";\n",
+    
+    "  STITERATIONS = ",
+    mixture_stiterations,
+    ";\n",
+    
+    "  LRTSTARTS = ",
+    paste(
+      mixture_lrt_starts,
+      collapse = " "
+    ),
+    ";\n\n",
+    
+    "MODEL:\n",
+    "  %OVERALL%\n\n",
+    
+    "  ! Quadratic growth process for maltreatment burden\n",
+    burden_growth_syntax,
+    "\n\n",
+    
+    "  ! Growth-factor variances constrained equal across classes\n",
+    "  ",
+    paste(
+      burden_growth_factors,
+      collapse = " "
+    ),
+    ";\n\n",
+    
+    "  ! Growth-factor covariances constrained equal across classes\n",
+    burden_covariances_syntax,
+    "\n\n",
+    
+    "  ! Residual variances constrained equal across classes\n",
+    "  ",
+    paste(
+      burden_variables,
+      collapse = " "
+    ),
+    ";\n\n",
+    
+    "  ! Class-specific growth-factor means\n",
+    class_specific_means_syntax,
+    "\n\n",
+    
+    trajectory_model_constraint_syntax,
+    
+    "OUTPUT:\n",
+    "  SAMPSTAT;\n",
+    "  STANDARDIZED;\n",
+    "  CINTERVAL;\n",
+    "  TECH1;\n",
+    "  TECH4;\n",
+    "  TECH7;\n",
+    "  TECH8;\n",
+    "  TECH11;\n",
+    "  TECH14;\n\n",
+    
+    "SAVEDATA:\n",
+    "  FILE = ",
+    savedata_filename,
+    ";\n",
+    "  SAVE = CPROBABILITIES;\n"
+  )
+  
+  
+  ##### WRITE AND DOCUMENT INPUT ####
+  
+  write_mplus_input(
+    syntax = input_syntax,
+    filename = input_filename,
+    github_dir = github_maltreatment_dir,
+    
+    documentation = list(
+      model_id = model_id,
+      
+      model_name = paste(
+        class_word,
+        "-class quadratic growth mixture model",
+        "for maltreatment burden"
+      ),
+      
+      model_family = "Growth mixture model",
+      
+      script = "02_create_mplus_inputs_LTC.R",
+      
+      sample = trajectory_sample_description,
+      
+      estimator = "MLR",
+      
+      specification = paste(
+        class_word,
+        "-class quadratic growth mixture model for the",
+        "period-specific maltreatment burden index;",
+        "seven standardized burden indicators cover",
+        "infancy through young adulthood;",
+        "growth-factor means vary across classes, whereas",
+        "growth-factor variances, growth-factor covariances,",
+        "and indicator residual variances are constrained",
+        "equal across classes"
+      ),
+      
+      time_scores = time_score_documentation,
+      
+      residual_covariances = paste(
+        "None; period-specific residual variances are",
+        "freely estimated but constrained equal across classes"
+      ),
+      
+      covariates = "None",
+      
+      model_role = model_role,
+      
+      notes = paste(
+        "Estimated only among maltreated participants;",
+        "class membership is defined by differences in the",
+        "means of the intercept, linear slope, and quadratic",
+        "growth factors;",
+        "random-start settings are STARTS =",
+        mixture_starts_initial,
+        mixture_starts_final,
+        "and LRTSTARTS =",
+        paste(
+          mixture_lrt_starts,
+          collapse = " "
+        ),
+        "; posterior class probabilities and most likely",
+        "class membership are saved using",
+        "SAVE = CPROBABILITIES;",
+        "one unit of developmental time corresponds to",
+        time_scale_years,
+        "years"
+      )
+    )
+  )
+  
+  
+  ##### DEFINE CREATED FILE PATHS ####
+  
+  input_file <- file.path(
+    mplus_input_dir,
+    input_filename
+  )
+  
+  github_input_file <- file.path(
+    github_maltreatment_dir,
+    input_filename
+  )
+  
+  output_file <- paste0(
+    tools::file_path_sans_ext(
+      input_file
+    ),
+    ".out"
+  )
+  
+  savedata_file <- file.path(
+    mplus_input_dir,
+    savedata_filename
+  )
+  
+  
+  ##### CHECK CREATED INPUT ####
+  
+  stopifnot(
+    file.exists(input_file),
+    file.exists(github_input_file)
+  )
+  
+  generated_input <- readLines(
+    input_file,
+    warn = FALSE
+  )
+  
+  stopifnot(
+    any(
+      grepl(
+        paste0(
+          "CLASSES = c(",
+          number_of_classes,
+          ");"
+        ),
+        generated_input,
+        fixed = TRUE
+      )
+    ),
+    
+    any(
+      grepl(
+        paste0(
+          "USEOBSERVATIONS ARE ",
+          trajectory_sample_filter,
+          ";"
+        ),
+        generated_input,
+        fixed = TRUE
+      )
+    ),
+    
+    any(
+      grepl(
+        "bur_i bur_s bur_q |",
+        generated_input,
+        fixed = TRUE
+      )
+    ),
+    
+    any(
+      grepl(
+        "SAVE = CPROBABILITIES;",
+        generated_input,
+        fixed = TRUE
+      )
+    )
+  )
+  
+  message(
+    "Created ",
+    model_id,
+    ": ",
+    input_file
+  )
+  
+  
+  ##### RETURN MODEL FILES ####
+  
+  list(
+    model_id = model_id,
+    number_of_classes = number_of_classes,
+    input_file = input_file,
+    output_file = output_file,
+    savedata_file = savedata_file
+  )
+}
+##### DEFINE M17-M19 MODEL SETTINGS #####
+
+burden_mixture_model_settings <- list(
+  M17 = list(
+    model_number = 17L,
+    number_of_classes = 2L,
+    
+    model_role = paste(
+      "Candidate two-class solution used as the first",
+      "multi-class model in the burden-trajectory",
+      "class-enumeration sequence"
+    )
+  ),
+  
+  M18 = list(
+    model_number = 18L,
+    number_of_classes = 3L,
+    
+    model_role = paste(
+      "Primary retained three-class solution used for",
+      "the substantive trajectory classification and",
+      "the subsequent outcome analyses"
+    )
+  ),
+  
+  M19 = list(
+    model_number = 19L,
+    number_of_classes = 4L,
+    
+    model_role = paste(
+      "Candidate four-class solution used to evaluate",
+      "whether an additional trajectory class improves",
+      "the three-class representation"
+    )
+  )
+)
+
+##### CREATE M17-M19 INPUT FILES #####
+
+
+burden_mixture_model_files <- lapply(
+  burden_mixture_model_settings,
+  function(settings) {
+    
+    create_burden_mixture_input(
+      model_number = settings$model_number,
+      number_of_classes = settings$number_of_classes,
+      model_role = settings$model_role
+    )
+  }
+)
+
+
+##### CREATE INDIVIDUAL INPUT-FILE OBJECTS ####
+
+input_file_m17 <-
+  burden_mixture_model_files$M17$input_file
+
+input_file_m18 <-
+  burden_mixture_model_files$M18$input_file
+
+input_file_m19 <-
+  burden_mixture_model_files$M19$input_file
+
+
+##### CREATE INDIVIDUAL OUTPUT-FILE OBJECTS ####
+
+output_file_m17 <-
+  burden_mixture_model_files$M17$output_file
+
+output_file_m18 <-
+  burden_mixture_model_files$M18$output_file
+
+output_file_m19 <-
+  burden_mixture_model_files$M19$output_file
+
+
+##### CREATE INDIVIDUAL SAVEDATA-FILE OBJECTS ####
+
+savedata_file_m17 <-
+  burden_mixture_model_files$M17$savedata_file
+
+savedata_file_m18 <-
+  burden_mixture_model_files$M18$savedata_file
+
+savedata_file_m19 <-
+  burden_mixture_model_files$M19$savedata_file
+
+
+##### COLLECT MODEL FILES ####
+
+mixture_input_files <- vapply(
+  burden_mixture_model_files,
+  function(model_files) {
+    model_files$input_file
+  },
+  character(1)
+)
+
+mixture_output_files <- vapply(
+  burden_mixture_model_files,
+  function(model_files) {
+    model_files$output_file
+  },
+  character(1)
+)
+
+mixture_savedata_files <- vapply(
+  burden_mixture_model_files,
+  function(model_files) {
+    model_files$savedata_file
+  },
+  character(1)
+)
+
+##### CHECK INPUT FILES ####
+
+missing_input_files <- mixture_input_files[
+  !file.exists(mixture_input_files)
+]
+
+if (length(missing_input_files) > 0) {
+  
+  stop(
+    "The following mixture-model input files are missing:\n",
+    paste(
+      names(missing_input_files),
+      missing_input_files,
+      sep = ": ",
+      collapse = "\n"
+    )
+  )
+}
+
+
+##### RECORD PREVIOUS FILE TIMES ####
+
+previous_output_mtimes <- vapply(
+  mixture_output_files,
+  function(output_file) {
+    
+    if (file.exists(output_file)) {
+      
+      as.numeric(
+        file.info(
+          output_file
+        )$mtime
+      )
+      
+    } else {
+      
+      NA_real_
+    }
+  },
+  numeric(1)
+)
+
+previous_savedata_mtimes <- vapply(
+  mixture_savedata_files,
+  function(savedata_file) {
+    
+    if (file.exists(savedata_file)) {
+      
+      as.numeric(
+        file.info(
+          savedata_file
+        )$mtime
+      )
+      
+    } else {
+      
+      NA_real_
+    }
+  },
+  numeric(1)
+)
+
+
+##### RUN MODELS ####
+
+if (isTRUE(run_mplus_models)) {
+  
+  if (
+    MplusAutomation::mplusAvailable(
+      silent = FALSE
+    ) != 0
+  ) {
+    
+    stop(
+      "Mplus could not be detected by MplusAutomation."
+    )
+  }
+  
+  for (model_id in names(mixture_input_files)) {
+    
+    input_file <- mixture_input_files[[model_id]]
+    output_file <- mixture_output_files[[model_id]]
+    savedata_file <- mixture_savedata_files[[model_id]]
+    
+    message(
+      "Running ",
+      model_id,
+      ": ",
+      basename(input_file)
+    )
+    
+    MplusAutomation::runModels(
+      target = input_file,
+      replaceOutfile = "always",
+      showOutput = TRUE,
+      logFile = NULL,
+      quiet = FALSE
+    )
+    
+    
+    ##### CHECK OUTPUT FILE ####
+    
+    if (!file.exists(output_file)) {
+      
+      stop(
+        model_id,
+        " did not create the expected output:\n",
+        output_file
+      )
+    }
+    
+    current_output_mtime <- as.numeric(
+      file.info(
+        output_file
+      )$mtime
+    )
+    
+    if (
+      !is.na(previous_output_mtimes[[model_id]]) &&
+      current_output_mtime <=
+      previous_output_mtimes[[model_id]]
+    ) {
+      
+      stop(
+        model_id,
+        " output exists but was not updated:\n",
+        output_file
+      )
+    }
+    
+    
+    ##### CHECK NORMAL TERMINATION ####
+    
+    output_text <- readLines(
+      output_file,
+      warn = FALSE
+    )
+    
+    model_terminated_normally <- any(
+      grepl(
+        "THE MODEL ESTIMATION TERMINATED NORMALLY",
+        output_text,
+        fixed = TRUE
+      )
+    )
+    
+    if (!model_terminated_normally) {
+      
+      stop(
+        model_id,
+        " created an output but did not terminate normally:\n",
+        output_file
+      )
+    }
+    
+    
+    ##### CHECK REPLICATION OF BEST LOGLIKELIHOOD ####
+    
+    best_loglikelihood_not_replicated <- any(
+      grepl(
+        "THE BEST LOGLIKELIHOOD VALUE WAS NOT REPLICATED",
+        output_text,
+        fixed = TRUE
+      )
+    )
+    
+    if (best_loglikelihood_not_replicated) {
+      
+      stop(
+        model_id,
+        " terminated, but the best loglikelihood was not replicated:\n",
+        output_file
+      )
+    }
+    
+    
+    ##### CHECK SAVEDATA FILE ####
+    
+    if (!file.exists(savedata_file)) {
+      
+      stop(
+        model_id,
+        " did not create the expected class-probability file:\n",
+        savedata_file
+      )
+    }
+    
+    current_savedata_mtime <- as.numeric(
+      file.info(
+        savedata_file
+      )$mtime
+    )
+    
+    if (
+      !is.na(previous_savedata_mtimes[[model_id]]) &&
+      current_savedata_mtime <=
+      previous_savedata_mtimes[[model_id]]
+    ) {
+      
+      stop(
+        model_id,
+        " SAVEDATA file exists but was not updated:\n",
+        savedata_file
+      )
+    }
+    
+    
+    ##### REPORT SUCCESS ####
+    
+    message(
+      model_id,
+      " completed successfully; output and ",
+      "class-probability data were updated."
+    )
+  }
+  
+} else {
+  
+  message(
+    "M17-M19 inputs were created, but Mplus execution was skipped."
+  )
+}
+
+
+
+
 
 #-------------------------------------------------------------------------
 ##### SYNCHRONIZE AND ARCHIVE COMPLETED MPLUS MODELS #########
