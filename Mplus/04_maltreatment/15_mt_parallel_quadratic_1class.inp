@@ -102,29 +102,64 @@ MODEL:
   sub_i sub_s sub_q fq_i fq_s fq_q sev_i sev_s sev_q;
 
   ! Covariances among all growth factors
-  sub_i WITH sub_s sub_q fq_i fq_s fq_q sev_i sev_s sev_q;
-  sub_s WITH sub_q fq_i fq_s fq_q sev_i sev_s sev_q;
-  sub_q WITH fq_i fq_s fq_q sev_i sev_s sev_q;
-  fq_i WITH fq_s fq_q sev_i sev_s sev_q;
-  fq_s WITH fq_q sev_i sev_s sev_q;
-  fq_q WITH sev_i sev_s sev_q;
-  sev_i WITH sev_s sev_q;
+  sub_i WITH sub_s;
+  sub_i WITH sub_q;
+  sub_i WITH fq_i;
+  sub_i WITH fq_s;
+  sub_i WITH fq_q;
+  sub_i WITH sev_i;
+  sub_i WITH sev_s;
+  sub_i WITH sev_q;
+  sub_s WITH sub_q;
+  sub_s WITH fq_i;
+  sub_s WITH fq_s;
+  sub_s WITH fq_q;
+  sub_s WITH sev_i;
+  sub_s WITH sev_s;
+  sub_s WITH sev_q;
+  sub_q WITH fq_i;
+  sub_q WITH fq_s;
+  sub_q WITH fq_q;
+  sub_q WITH sev_i;
+  sub_q WITH sev_s;
+  sub_q WITH sev_q;
+  fq_i WITH fq_s;
+  fq_i WITH fq_q;
+  fq_i WITH sev_i;
+  fq_i WITH sev_s;
+  fq_i WITH sev_q;
+  fq_s WITH fq_q;
+  fq_s WITH sev_i;
+  fq_s WITH sev_s;
+  fq_s WITH sev_q;
+  fq_q WITH sev_i;
+  fq_q WITH sev_s;
+  fq_q WITH sev_q;
+  sev_i WITH sev_s;
+  sev_i WITH sev_q;
   sev_s WITH sev_q;
 
   ! Residual covariances within developmental periods
-  z5_sa WITH zfq_sa zsv_sa;
+  z5_sa WITH zfq_sa;
+  z5_sa WITH zsv_sa;
   zfq_sa WITH zsv_sa;
-  z5_kk WITH zfq_kk zsv_kk;
+  z5_kk WITH zfq_kk;
+  z5_kk WITH zsv_kk;
   zfq_kk WITH zsv_kk;
-  z5_vsa WITH zfq_vsa zsv_vsa;
+  z5_vsa WITH zfq_vsa;
+  z5_vsa WITH zsv_vsa;
   zfq_vsa WITH zsv_vsa;
-  z5_fsz WITH zfq_fsz zsv_fsz;
+  z5_fsz WITH zfq_fsz;
+  z5_fsz WITH zsv_fsz;
   zfq_fsz WITH zsv_fsz;
-  z5_ssz WITH zfq_ssz zsv_ssz;
+  z5_ssz WITH zfq_ssz;
+  z5_ssz WITH zsv_ssz;
   zfq_ssz WITH zsv_ssz;
-  z5_ja WITH zfq_ja zsv_ja;
+  z5_ja WITH zfq_ja;
+  z5_ja WITH zsv_ja;
   zfq_ja WITH zsv_ja;
-  z5_jea WITH zfq_jea zsv_jea;
+  z5_jea WITH zfq_jea;
+  z5_jea WITH zsv_jea;
   zfq_jea WITH zsv_jea;
 
 OUTPUT:

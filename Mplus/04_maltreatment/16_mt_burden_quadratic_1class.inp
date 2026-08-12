@@ -81,7 +81,8 @@ MODEL:
   bur_i bur_s bur_q;
 
   ! Covariances among growth factors
-  bur_i WITH bur_s bur_q;
+  bur_i WITH bur_s;
+  bur_i WITH bur_q;
   bur_s WITH bur_q;
 
 OUTPUT:

@@ -2263,6 +2263,86 @@ stopifnot(
 )
 
 
+##### CREATE GROWTH PROCESS SYNTAX ####
+
+create_growth_process_syntax <- function(
+    growth_factors,
+    observed_variables,
+    time_scores
+) {
+  
+  stopifnot(
+    length(growth_factors) == 3,
+    length(observed_variables) == length(time_scores)
+  )
+  
+  formatted_time_scores <- vapply(
+    time_scores,
+    format_mplus_number,
+    character(1)
+  )
+  
+  indicator_syntax <- paste0(
+    "    ",
+    observed_variables,
+    "@",
+    formatted_time_scores,
+    collapse = "\n"
+  )
+  
+  paste0(
+    "  ",
+    paste(
+      growth_factors,
+      collapse = " "
+    ),
+    " |\n",
+    indicator_syntax,
+    ";"
+  )
+}
+
+##### CREATE ALL PAIRWISE COVARIANCES ####
+
+create_all_covariances_syntax <- function(
+    variable_names
+) {
+  
+  variable_names <- trimws(
+    as.character(
+      variable_names
+    )
+  )
+  
+  if (
+    length(variable_names) < 2L ||
+    any(is.na(variable_names)) ||
+    any(variable_names == "") ||
+    anyDuplicated(variable_names)
+  ) {
+    stop(
+      paste(
+        "`variable_names` must contain at least two",
+        "unique, non-missing variable names."
+      )
+    )
+  }
+  
+  covariance_pairs <- utils::combn(
+    variable_names,
+    2L
+  )
+  
+  paste0(
+    "  ",
+    covariance_pairs[1, ],
+    " WITH ",
+    covariance_pairs[2, ],
+    ";",
+    collapse = "\n"
+  )
+}
+
 ##### CREATE PARALLEL GROWTH-PROCESS SYNTAX ####
 
 growth_processes_syntax <- paste(
@@ -3133,6 +3213,14 @@ stopifnot(
   all(is.finite(trajectory_time_grid_m18))
 )
 
+##### DEFINE OPTSEEDS FOR TARGETED RERUNS
+
+optseed_by_classes <- c(
+  `2` = 691234L,
+  `3` = 930781L,
+  `4` = 85462L
+)
+
 
 ##### DEFINE BURDEN-MIXTURE INPUT FUNCTION #####
 
@@ -3176,6 +3264,32 @@ create_burden_mixture_input <- function(
     class_word
   )
   
+  ##### SELECT MODEL-SPECIFIC OPTSEED
+  
+  model_optseed <- unname(
+    optseed_by_classes[
+      as.character(number_of_classes)
+    ]
+  )
+  
+  if (
+    length(model_optseed) != 1L ||
+    is.na(model_optseed)
+  ) {
+    stop(
+      "No OPTSEED defined for ",
+      number_of_classes,
+      " classes."
+    )
+  }
+  
+  message(
+    model_id,
+    ": ",
+    number_of_classes,
+    " classes; OPTSEED = ",
+    model_optseed
+  )
   
   ##### CREATE LABELED CLASS-SPECIFIC MEAN SYNTAX ####
   
@@ -3345,7 +3459,7 @@ create_burden_mixture_input <- function(
   
   ##### CREATE MPLUS INPUT SYNTAX ####
   
-  input_syntax <- paste0(
+    input_syntax <- paste0(
     "TITLE:\n",
     "  ",
     model_id,
@@ -3381,23 +3495,11 @@ create_burden_mixture_input <- function(
     "ANALYSIS:\n",
     "  TYPE = MIXTURE;\n",
     "  ESTIMATOR = MLR;\n",
-    
-    "  STARTS = ",
-    mixture_starts_initial,
-    " ",
-    mixture_starts_final,
+    "  STARTS = 0;\n",
+    "  OPTSEED = ",
+    model_optseed,
     ";\n",
-    
-    "  STITERATIONS = ",
-    mixture_stiterations,
-    ";\n",
-    
-    "  LRTSTARTS = ",
-    paste(
-      mixture_lrt_starts,
-      collapse = " "
-    ),
-    ";\n\n",
+    "  PROCESSORS = 4;\n\n",
     
     "MODEL:\n",
     "  %OVERALL%\n\n",
@@ -3431,17 +3533,11 @@ create_burden_mixture_input <- function(
     "\n\n",
     
     trajectory_model_constraint_syntax,
+    "\n",
     
     "OUTPUT:\n",
-    "  SAMPSTAT;\n",
-    "  STANDARDIZED;\n",
-    "  CINTERVAL;\n",
     "  TECH1;\n",
-    "  TECH4;\n",
-    "  TECH7;\n",
-    "  TECH8;\n",
-    "  TECH11;\n",
-    "  TECH14;\n\n",
+    "  TECH8;\n\n",
     
     "SAVEDATA:\n",
     "  FILE = ",
@@ -3655,6 +3751,7 @@ burden_mixture_model_settings <- list(
     )
   )
 )
+
 
 ##### CREATE M17-M19 INPUT FILES #####
 
@@ -3961,219 +4058,219 @@ if (isTRUE(run_mplus_models)) {
 
 
 
-#-------------------------------------------------------------------------
-##### SYNCHRONIZE AND ARCHIVE COMPLETED MPLUS MODELS #########
-#-------------------------------------------------------------------------
-##### DEFINE MODEL ROUTING ####
-model_routing <- list(
-  measurement = list(
-    files = c(
-      "02_sdq_residuals_free",
-      "04_sdq_within_informant_crossscale",
-      "05_sdq_between_informant_residuals"
-    ),
-    github_dir = github_measurement_dir,
-    results_dir = mplus_results_dir_measurement
-  ),
-  
-  invariance = list(
-    files = c(
-      "01_sdq_configural",
-      "03_sdq_metric_invariance",
-      "06_sdq_full_scalar_invariance",
-      "07_sdq_partial_scalar_invariance"
-    ),
-    github_dir = github_invariance_dir,
-    results_dir = mplus_results_dir_invariance
-  ),
-  
-  lcs = list(
-    files = c(
-      "08_sdq_classical_lcs"
-    ),
-    github_dir = github_lcs_dir,
-    results_dir = mplus_results_dir_lcs
-  )
-)
-
-##### DEFINE ARCHIVE ####
-archive_root <- file.path(
-  mplus_input_dir,
-  "archive"
-)
-
-archive_stamp <- format(
-  Sys.time(),
-  "%Y-%m-%d_%H%M"
-)
-
-dir.create(
-  archive_root,
-  recursive = TRUE,
-  showWarnings = FALSE
-)
-
-##### DEFINE CHECKED COPY FUNCTION ####
-copy_files_checked <- function(
-    files,
-    target_dir
-) {
-  
-  if (length(files) == 0) {
-    return(invisible(TRUE))
-  }
-  
-  dir.create(
-    target_dir,
-    recursive = TRUE,
-    showWarnings = FALSE
-  )
-  
-  copy_success <- file.copy(
-    from = files,
-    to = file.path(
-      target_dir,
-      basename(files)
-    ),
-    overwrite = TRUE
-  )
-  
-  if (!all(copy_success)) {
-    stop(
-      paste0(
-        "Could not copy all files to: ",
-        target_dir
-      )
-    )
-  }
-  
-  invisible(TRUE)
-}
-
-##### PROCESS MODEL GROUPS ####
-for (group_name in names(model_routing)) {
-  
-  group <- model_routing[[group_name]]
-  
-  input_files <- file.path(
-    mplus_input_dir,
-    paste0(
-      group$files,
-      ".inp"
-    )
-  )
-  
-  output_files <- file.path(
-    mplus_input_dir,
-    paste0(
-      group$files,
-      ".out"
-    )
-  )
-  
-  gh5_files <- file.path(
-    mplus_input_dir,
-    paste0(
-      group$files,
-      ".gh5"
-    )
-  )
-  
-  ##### CHECK REQUIRED FILES ####
-  required_files <- c(
-    input_files,
-    output_files
-  )
-  
-  missing_files <- required_files[
-    !file.exists(required_files)
-  ]
-  
-  if (length(missing_files) > 0) {
-    
-    print(
-      missing_files
-    )
-    
-    stop(
-      paste0(
-        "Required files are missing for group: ",
-        group_name
-      )
-    )
-  }
-  
-  ##### RETAIN EXISTING OPTIONAL GH5 FILES ####
-  gh5_files <- gh5_files[
-    file.exists(gh5_files)
-  ]
-  
-  result_files <- c(
-    output_files,
-    gh5_files
-  )
-  
-  all_model_files <- c(
-    input_files,
-    result_files
-  )
-  
-  ##### COPY INPUTS TO GITHUB ####
-  copy_files_checked(
-    files = input_files,
-    target_dir = group$github_dir
-  )
-  
-  ##### COPY OUTPUTS TO SEAGATE RESULTS ####
-  copy_files_checked(
-    files = result_files,
-    target_dir = group$results_dir
-  )
-  
-  ##### CREATE DATED GROUP ARCHIVE ####
-  group_archive_dir <- file.path(
-    archive_root,
-    paste0(
-      archive_stamp,
-      "_",
-      group_name
-    )
-  )
-  
-  ##### COPY ALL MODEL FILES TO ARCHIVE ####
-  copy_files_checked(
-    files = all_model_files,
-    target_dir = group_archive_dir
-  )
-  
-  ##### REMOVE ARCHIVED FILES FROM WORKING DIRECTORY ####
-  removal_success <- file.remove(
-    all_model_files
-  )
-  
-  if (!all(removal_success)) {
-    stop(
-      paste0(
-        "Could not remove all archived files for group: ",
-        group_name
-      )
-    )
-  }
-}
-
-##### SHOW REMAINING WORKING FILES ####
-message(
-  "\nSynchronization and archiving completed."
-)
-
-list.files(
-  mplus_input_dir
-)
-
-##### SHOW CREATED ARCHIVE DIRECTORIES ####
-list.dirs(
-  archive_root,
-  recursive = FALSE,
-  full.names = FALSE
-)
-#-------------------------------------------------------------------------
+# #-------------------------------------------------------------------------
+# ##### SYNCHRONIZE AND ARCHIVE COMPLETED MPLUS MODELS #########
+# #-------------------------------------------------------------------------
+# ##### DEFINE MODEL ROUTING ####
+# model_routing <- list(
+#   measurement = list(
+#     files = c(
+#       "02_sdq_residuals_free",
+#       "04_sdq_within_informant_crossscale",
+#       "05_sdq_between_informant_residuals"
+#     ),
+#     github_dir = github_measurement_dir,
+#     results_dir = mplus_results_dir_measurement
+#   ),
+#   
+#   invariance = list(
+#     files = c(
+#       "01_sdq_configural",
+#       "03_sdq_metric_invariance",
+#       "06_sdq_full_scalar_invariance",
+#       "07_sdq_partial_scalar_invariance"
+#     ),
+#     github_dir = github_invariance_dir,
+#     results_dir = mplus_results_dir_invariance
+#   ),
+#   
+#   lcs = list(
+#     files = c(
+#       "08_sdq_classical_lcs"
+#     ),
+#     github_dir = github_lcs_dir,
+#     results_dir = mplus_results_dir_lcs
+#   )
+# )
+# 
+# ##### DEFINE ARCHIVE ####
+# archive_root <- file.path(
+#   mplus_input_dir,
+#   "archive"
+# )
+# 
+# archive_stamp <- format(
+#   Sys.time(),
+#   "%Y-%m-%d_%H%M"
+# )
+# 
+# dir.create(
+#   archive_root,
+#   recursive = TRUE,
+#   showWarnings = FALSE
+# )
+# 
+# ##### DEFINE CHECKED COPY FUNCTION ####
+# copy_files_checked <- function(
+#     files,
+#     target_dir
+# ) {
+#   
+#   if (length(files) == 0) {
+#     return(invisible(TRUE))
+#   }
+#   
+#   dir.create(
+#     target_dir,
+#     recursive = TRUE,
+#     showWarnings = FALSE
+#   )
+#   
+#   copy_success <- file.copy(
+#     from = files,
+#     to = file.path(
+#       target_dir,
+#       basename(files)
+#     ),
+#     overwrite = TRUE
+#   )
+#   
+#   if (!all(copy_success)) {
+#     stop(
+#       paste0(
+#         "Could not copy all files to: ",
+#         target_dir
+#       )
+#     )
+#   }
+#   
+#   invisible(TRUE)
+# }
+# 
+# ##### PROCESS MODEL GROUPS ####
+# for (group_name in names(model_routing)) {
+#   
+#   group <- model_routing[[group_name]]
+#   
+#   input_files <- file.path(
+#     mplus_input_dir,
+#     paste0(
+#       group$files,
+#       ".inp"
+#     )
+#   )
+#   
+#   output_files <- file.path(
+#     mplus_input_dir,
+#     paste0(
+#       group$files,
+#       ".out"
+#     )
+#   )
+#   
+#   gh5_files <- file.path(
+#     mplus_input_dir,
+#     paste0(
+#       group$files,
+#       ".gh5"
+#     )
+#   )
+#   
+#   ##### CHECK REQUIRED FILES ####
+#   required_files <- c(
+#     input_files,
+#     output_files
+#   )
+#   
+#   missing_files <- required_files[
+#     !file.exists(required_files)
+#   ]
+#   
+#   if (length(missing_files) > 0) {
+#     
+#     print(
+#       missing_files
+#     )
+#     
+#     stop(
+#       paste0(
+#         "Required files are missing for group: ",
+#         group_name
+#       )
+#     )
+#   }
+#   
+#   ##### RETAIN EXISTING OPTIONAL GH5 FILES ####
+#   gh5_files <- gh5_files[
+#     file.exists(gh5_files)
+#   ]
+#   
+#   result_files <- c(
+#     output_files,
+#     gh5_files
+#   )
+#   
+#   all_model_files <- c(
+#     input_files,
+#     result_files
+#   )
+#   
+#   ##### COPY INPUTS TO GITHUB ####
+#   copy_files_checked(
+#     files = input_files,
+#     target_dir = group$github_dir
+#   )
+#   
+#   ##### COPY OUTPUTS TO SEAGATE RESULTS ####
+#   copy_files_checked(
+#     files = result_files,
+#     target_dir = group$results_dir
+#   )
+#   
+#   ##### CREATE DATED GROUP ARCHIVE ####
+#   group_archive_dir <- file.path(
+#     archive_root,
+#     paste0(
+#       archive_stamp,
+#       "_",
+#       group_name
+#     )
+#   )
+#   
+#   ##### COPY ALL MODEL FILES TO ARCHIVE ####
+#   copy_files_checked(
+#     files = all_model_files,
+#     target_dir = group_archive_dir
+#   )
+#   
+#   ##### REMOVE ARCHIVED FILES FROM WORKING DIRECTORY ####
+#   removal_success <- file.remove(
+#     all_model_files
+#   )
+#   
+#   if (!all(removal_success)) {
+#     stop(
+#       paste0(
+#         "Could not remove all archived files for group: ",
+#         group_name
+#       )
+#     )
+#   }
+# }
+# 
+# ##### SHOW REMAINING WORKING FILES ####
+# message(
+#   "\nSynchronization and archiving completed."
+# )
+# 
+# list.files(
+#   mplus_input_dir
+# )
+# 
+# ##### SHOW CREATED ARCHIVE DIRECTORIES ####
+# list.dirs(
+#   archive_root,
+#   recursive = FALSE,
+#   full.names = FALSE
+# )
+# #-------------------------------------------------------------------------

@@ -63,9 +63,9 @@ VARIABLE:
 ANALYSIS:
   TYPE = MIXTURE;
   ESTIMATOR = MLR;
-  STARTS = 4000 1000;
-  STITERATIONS = 20;
-  LRTSTARTS = 0 0 1000 250;
+  STARTS = 0;
+  OPTSEED = 85462;
+  PROCESSORS = 4;
 
 MODEL:
   %OVERALL%
@@ -84,7 +84,8 @@ MODEL:
   bur_i bur_s bur_q;
 
   ! Growth-factor covariances constrained equal across classes
-  bur_i WITH bur_s bur_q;
+  bur_i WITH bur_s;
+  bur_i WITH bur_q;
   bur_s WITH bur_q;
 
   ! Residual variances constrained equal across classes
@@ -92,27 +93,29 @@ MODEL:
 
   ! Class-specific growth-factor means
   %c#1%
-  [bur_i bur_s bur_q];
+  [bur_i] (bi1);
+  [bur_s] (bs1);
+  [bur_q] (bq1);
 
   %c#2%
-  [bur_i bur_s bur_q];
+  [bur_i] (bi2);
+  [bur_s] (bs2);
+  [bur_q] (bq2);
 
   %c#3%
-  [bur_i bur_s bur_q];
+  [bur_i] (bi3);
+  [bur_s] (bs3);
+  [bur_q] (bq3);
 
   %c#4%
-  [bur_i bur_s bur_q];
+  [bur_i] (bi4);
+  [bur_s] (bs4);
+  [bur_q] (bq4);
+
 
 OUTPUT:
-  SAMPSTAT;
-  STANDARDIZED;
-  CINTERVAL;
   TECH1;
-  TECH4;
-  TECH7;
   TECH8;
-  TECH11;
-  TECH14;
 
 SAVEDATA:
   FILE = 19_mt_burden_quadratic_4class_cprob.dat;

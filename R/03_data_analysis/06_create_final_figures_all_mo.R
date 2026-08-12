@@ -273,568 +273,736 @@ if (interactive()) {
   print(m8_figure)
 }
 
-#--------------------------------------------------------------
-###### PLOT LATENT TRAJECTORY CLASSES ###################
-#--------------------------------------------------------------
+#-------------------------------------------------------------------------
+##### FIGURE X: MALTREATMENT BURDEN TRAJECTORY CLASSES #####
+#-------------------------------------------------------------------------
 
-##### DEFINE TRAJECTORY GRID FOR M18 CONFIDENCE BANDS ####
+figure_number <- "X"
 
-trajectory_grid_points_m18 <- 81L
 
-trajectory_time_grid_m18 <- seq(
-  from = min(
-    developmental_time_scores
-  ),
-  to = max(
-    developmental_time_scores
-  ),
-  length.out = trajectory_grid_points_m18
+##### READ M18 OUTPUT ####
+
+m18_output_file <- file.path(
+  mplus_input_dir,
+  "18_mt_burden_quadratic_3class.out"
 )
 
-stopifnot(
-  length(trajectory_time_grid_m18) ==
-    trajectory_grid_points_m18,
-  all(is.finite(trajectory_time_grid_m18))
-)
-
-#-----------------------------------------------------------------------
-##### SELECT CLASSIFICATION VARIANT #####
-#-----------------------------------------------------------------------
-
-# Available options:
-#   "original" = original three-class LTC solution
-#   "mo"       = non-maltreated reference group plus three LTC classes
-
-classification_variant <- "mo"
-
-if (!classification_variant %in% c("original", "mo")) {
+if (!file.exists(m18_output_file)) {
   stop(
-    "classification_variant must be either 'original' or 'mo'."
+    "The M18 output file is missing:\n",
+    m18_output_file
+  )
+}
+
+m18_model <- MplusAutomation::readModels(
+  m18_output_file,
+  quiet = TRUE
+)
+
+m18_parameters <-
+  m18_model$parameters$unstandardized
+
+if (
+  is.null(m18_parameters) ||
+  nrow(m18_parameters) == 0
+) {
+  stop(
+    "No unstandardized parameters could be read from M18."
   )
 }
 
 
-#-----------------------------------------------------------------------
-##### CHECK PACKAGES AND PROJECT OBJECTS #####
-#-----------------------------------------------------------------------
+##### STANDARDIZE PARAMETER IDENTIFIERS ####
 
-required_packages <- c(
-  "MplusAutomation",
-  "dplyr",
-  "tidyr",
-  "tibble",
-  "purrr",
-  "ggplot2",
-  "ggrepel"
+m18_parameters$.parameter <- toupper(
+  trimws(
+    as.character(
+      m18_parameters$param
+    )
+  )
 )
 
-missing_packages <- required_packages[
-  !vapply(
-    required_packages,
-    requireNamespace,
-    logical(1),
-    quietly = TRUE
+m18_parameters$.header <- gsub(
+  "[^A-Z0-9]+",
+  "",
+  toupper(
+    trimws(
+      as.character(
+        m18_parameters$paramHeader
+      )
+    )
   )
+)
+
+
+##### IDENTIFY LATENT-CLASS COLUMN ####
+
+latent_class_column <- names(
+  m18_parameters
+)[
+  gsub(
+    "[^A-Z0-9]+",
+    "",
+    toupper(
+      names(
+        m18_parameters
+      )
+    )
+  ) == "LATENTCLASS"
 ]
 
-if (length(missing_packages) > 0) {
+if (length(latent_class_column) != 1) {
   stop(
-    "Install first: ",
     paste(
-      missing_packages,
-      collapse = ", "
+      "The latent-class column could not be identified",
+      "uniquely in the M18 parameters."
     )
   )
 }
 
-required_objects <- c(
-  "mplus_input_dir",
-  "mplus_results_dir",
-  "mplus_results_dir_maltreatment"
+m18_parameters$.mplus_class <- as.integer(
+  gsub(
+    "[^0-9]+",
+    "",
+    as.character(
+      m18_parameters[[latent_class_column]]
+    )
+  )
 )
 
-missing_objects <- required_objects[
-  !vapply(
-    required_objects,
-    exists,
-    logical(1),
-    inherits = TRUE
-  )
-]
 
-if (length(missing_objects) > 0) {
+##### EXTRACT CLASS-SPECIFIC GROWTH MEANS ####
+
+m18_growth_mean_rows <- m18_parameters |>
+  dplyr::filter(
+    .header == "MEANS",
+    .parameter %in% c(
+      "BUR_I",
+      "BUR_S",
+      "BUR_Q"
+    ),
+    .mplus_class %in% 1:3
+  )
+
+if (
+  nrow(m18_growth_mean_rows) != 9 ||
+  any(
+    table(
+      m18_growth_mean_rows$.mplus_class,
+      m18_growth_mean_rows$.parameter
+    ) != 1
+  )
+) {
   stop(
-    "Run the project setup first. Missing objects: ",
     paste(
-      missing_objects,
-      collapse = ", "
+      "The nine class-specific growth-factor means",
+      "could not be identified uniquely in M18."
     )
   )
 }
 
-
-#-----------------------------------------------------------------------
-##### DYNAMIC CLASSIFICATION SETTINGS #####
-#-----------------------------------------------------------------------
-
-if (classification_variant == "original") {
-
-  file_suffix <- ""
-  figure_suffix <- ""
-
-  class_numbers <- 1:3
-
-  class_labels <- c(
-    "Low and stable",
-    "Elevated and declining",
-    "High early burden with later rebound"
+m18_growth_means <- m18_growth_mean_rows |>
+  dplyr::group_by(
+    .mplus_class
+  ) |>
+  dplyr::summarise(
+    bur_i = as.numeric(
+      est[
+        .parameter == "BUR_I"
+      ]
+    ),
+    bur_s = as.numeric(
+      est[
+        .parameter == "BUR_S"
+      ]
+    ),
+    bur_q = as.numeric(
+      est[
+        .parameter == "BUR_Q"
+      ]
+    ),
+    .groups = "drop"
   )
 
-  reference_label <- class_labels[1]
 
-  m22_candidates <- c(
-    "m22_lcs_with_ltc_classes_aget2_sex.out",
-    "m22_lcs_with_ltc_classes_age_sex.out"
-  )
+##### DEFINE CLASS LABELS AND SIZES ####
 
-  m24a_candidates <- c(
-    "m24a_lcs_classes_prs_eau.out"
-  )
-
-  m25_candidates <- c(
-    "m25_lcs_classes_hair_cortisol.out"
-  )
-
-} else {
-
-  file_suffix <- "_mo"
-  figure_suffix <- "_mo"
-
-  class_numbers <- 1:4
-
-  class_labels <- c(
-    "Non-maltreated",
+m18_class_lookup <- tibble::tibble(
+  .mplus_class = c(
+    2L,
+    1L,
+    3L
+  ),
+  
+  class_name = c(
     "Moderate/early-increasing burden",
     "Elevated/declining burden",
     "High/rebound burden"
+  ),
+  
+  class_n = c(
+    223L,
+    42L,
+    38L
+  ),
+  
+  class_percent = c(
+    73.6,
+    13.9,
+    12.5
   )
-
-  reference_label <- class_labels[1]
-
-  m22_candidates <- c(
-    "m22_lcs_with_ltc_classes_age_sex_mo.out",
-    "m22_lcs_with_ltc_classes_aget2_sex_mo.out"
-  )
-
-  m24a_candidates <- c(
-    "m24a_lcs_classes_prs_eau_mo.out"
-  )
-
-  m25_candidates <- c(
-    "m25_lcs_classes_hair_cortisol_mo.out"
-  )
-}
-
-stopifnot(
-  length(class_numbers) == length(class_labels),
-  identical(class_numbers, seq_along(class_labels))
-)
-
-
-#-----------------------------------------------------------------------
-##### RESOLVE MODEL OUTPUT FILES #####
-#-----------------------------------------------------------------------
-
-resolve_existing_file <- function(
-    directory,
-    candidates,
-    label
-) {
-
-  candidate_paths <- file.path(
-    directory,
-    candidates
-  )
-
-  existing_paths <- candidate_paths[
-    file.exists(candidate_paths)
-  ]
-
-  if (length(existing_paths) == 0) {
-    stop(
-      label,
-      " output not found. Checked:\n",
-      paste(
-        candidate_paths,
-        collapse = "\n"
-      )
+) |>
+  dplyr::mutate(
+    class_label = paste0(
+      class_name,
+      " (n = ",
+      class_n,
+      "; ",
+      formatC(
+        class_percent,
+        format = "f",
+        digits = 1
+      ),
+      "%)"
     )
-  }
-
-  if (length(existing_paths) > 1) {
-    warning(
-      "Multiple ",
-      label,
-      " outputs found. Using the first one:\n",
-      existing_paths[1]
-    )
-  }
-
-  existing_paths[1]
-}
-
-m22_out <- resolve_existing_file(
-  directory = mplus_input_dir,
-  candidates = m22_candidates,
-  label = "M22"
-)
-
-m24a_out <- resolve_existing_file(
-  directory = mplus_input_dir,
-  candidates = m24a_candidates,
-  label = "M24a"
-)
-
-m25_out <- resolve_existing_file(
-  directory = mplus_input_dir,
-  candidates = m25_candidates,
-  label = "M25"
-)
-
-
-#-----------------------------------------------------------------------
-##### OUTPUT DIRECTORIES #####
-#-----------------------------------------------------------------------
-
-if (!exists("figures_manuscript_dir")) {
-  figures_manuscript_dir <- file.path(
-    mplus_results_dir,
-    "08_figures",
-    "manuscript"
   )
-}
 
-if (!exists("figures_appendix_dir")) {
-  figures_appendix_dir <- file.path(
-    mplus_results_dir,
-    "08_figures",
-    "appendix"
+
+##### EXTRACT DEVELOPMENTAL TIME SCORES ####
+
+developmental_period_lookup <- tibble::tibble(
+  .parameter = c(
+    "ZIND_SA",
+    "ZIND_KK",
+    "ZIND_VSA",
+    "ZIND_FSZ",
+    "ZIND_SSZ",
+    "ZIND_JA",
+    "ZIND_JEA"
+  ),
+  
+  period = c(
+    "SA",
+    "KK",
+    "VSA",
+    "FSZ",
+    "SSZ",
+    "JA",
+    "JEA"
+  ),
+  
+  period_order = seq_len(
+    7
   )
-}
-
-dir.create(
-  figures_manuscript_dir,
-  recursive = TRUE,
-  showWarnings = FALSE
 )
 
-dir.create(
-  figures_appendix_dir,
-  recursive = TRUE,
-  showWarnings = FALSE
-)
-
-
-#-----------------------------------------------------------------------
-##### HELPER FUNCTIONS #####
-#-----------------------------------------------------------------------
-
-clean_text <- function(x) {
-  toupper(
-    gsub(
-      "[^A-Za-z0-9]+",
+m18_time_score_rows <- m18_parameters |>
+  dplyr::mutate(
+    .header_clean = gsub(
+      "[^A-Z0-9]",
       "",
-      trimws(
-        as.character(x)
+      toupper(
+        .header
       )
-    )
-  )
-}
-
-read_unstandardized_parameters <- function(path) {
-
-  model <- MplusAutomation::readModels(
-    path,
-    what = c(
-      "parameters",
-      "summaries",
-      "warn_err"
     ),
-    quiet = TRUE
-  )
-
-  if (length(model$errors) > 0) {
-    stop(
-      "Mplus errors found in:\n",
-      path,
-      "\n",
-      paste(
-        unlist(model$errors),
-        collapse = "\n"
+    est_numeric = suppressWarnings(
+      as.numeric(
+        est
       )
     )
-  }
-
-  parameters <- tibble::as_tibble(
-    model$parameters$unstandardized
+  ) |>
+  dplyr::filter(
+    .header_clean == "BURS",
+    .parameter %in%
+      developmental_period_lookup$.parameter,
+    is.finite(
+      est_numeric
+    )
+  ) |>
+  dplyr::group_by(
+    .parameter
+  ) |>
+  dplyr::summarise(
+    time_score = dplyr::first(
+      est_numeric
+    ),
+    number_of_values = dplyr::n_distinct(
+      est_numeric
+    ),
+    .groups = "drop"
   )
 
-  names(parameters) <- tolower(
-    names(parameters)
+developmental_period_data <- developmental_period_lookup |>
+  dplyr::left_join(
+    m18_time_score_rows,
+    by = ".parameter"
+  ) |>
+  dplyr::arrange(
+    period_order
   )
 
-  parameters |>
-    dplyr::mutate(
-      header_clean = clean_text(
-        .data$paramheader
-      ),
-      param_clean = clean_text(
-        .data$param
+if (
+  any(
+    !is.finite(
+      developmental_period_data$time_score
+    )
+  )
+) {
+  stop(
+    "At least one developmental time score is missing."
+  )
+}
+
+
+##### EXTRACT MODEL-ESTIMATED TRAJECTORY AND 95% CIs ####
+
+trajectory_grid_points_m18 <- 81L
+
+m18_trajectory_rows <- m18_parameters |>
+  dplyr::filter(
+    grepl(
+      "^C[123]P[0-9]{3}$",
+      .parameter
+    )
+  ) |>
+  dplyr::transmute(
+    .mplus_class = as.integer(
+      substr(
+        .parameter,
+        2,
+        2
       )
-    )
-}
-
-extract_new_parameter <- function(
-    parameters,
-    parameter_name
-) {
-
-  matched <- parameters |>
-    dplyr::filter(
-      grepl(
-        "NEW|ADDITIONAL",
-        .data$header_clean
-      ),
-      .data$param_clean ==
-        clean_text(parameter_name)
-    )
-
-  if (nrow(matched) != 1) {
-    stop(
-      "Expected exactly one new parameter named ",
-      parameter_name,
-      " but found ",
-      nrow(matched),
-      "."
-    )
-  }
-
-  matched |>
-    dplyr::slice(1) |>
-    dplyr::transmute(
-      estimate = as.numeric(.data$est),
-      se = as.numeric(.data$se),
-      p = as.numeric(.data$pval)
-    )
-}
-
-extract_regression <- function(
-    parameters,
-    header,
-    predictor
-) {
-
-  matched <- parameters |>
-    dplyr::filter(
-      .data$header_clean ==
-        clean_text(header),
-      .data$param_clean ==
-        clean_text(predictor)
-    )
-
-  if (nrow(matched) != 1) {
-    stop(
-      "Expected exactly one regression parameter for ",
-      header,
-      " / ",
-      predictor,
-      " but found ",
-      nrow(matched),
-      "."
-    )
-  }
-
-  list(
+    ),
+    
+    grid_position = as.integer(
+      substr(
+        .parameter,
+        4,
+        6
+      )
+    ),
+    
     estimate = as.numeric(
-      matched$est[1]
+      est
     ),
+    
     se = as.numeric(
-      matched$se[1]
+      se
     ),
-    p = as.numeric(
-      matched$pval[1]
-    )
+    
+    ci_lower = estimate -
+      1.96 * se,
+    
+    ci_upper = estimate +
+      1.96 * se
   )
-}
 
-save_figure <- function(
-    plot,
-    stem,
-    width,
-    height,
-    output_dir
+expected_trajectory_rows <-
+  3L * trajectory_grid_points_m18
+
+if (
+  nrow(m18_trajectory_rows) !=
+  expected_trajectory_rows ||
+  any(
+    table(
+      m18_trajectory_rows$.mplus_class
+    ) != trajectory_grid_points_m18
+  )
 ) {
-
-  png_path <- file.path(
-    output_dir,
+  stop(
     paste0(
-      stem,
-      figure_suffix,
-      ".png"
+      "The expected ",
+      expected_trajectory_rows,
+      " M18 trajectory parameters were not found. ",
+      "Add the MODEL CONSTRAINT block to M18 and rerun it."
     )
   )
+}
 
-  pdf_path <- file.path(
-    output_dir,
-    paste0(
-      stem,
-      figure_suffix,
-      ".pdf"
+minimum_time_score <- min(
+  developmental_period_data$time_score
+)
+
+maximum_time_score <- max(
+  developmental_period_data$time_score
+)
+
+m18_trajectory_data <- m18_trajectory_rows |>
+  dplyr::mutate(
+    time_score = minimum_time_score +
+      (
+        grid_position - 1
+      ) /
+      (
+        trajectory_grid_points_m18 - 1
+      ) *
+      (
+        maximum_time_score -
+          minimum_time_score
+      )
+  ) |>
+  dplyr::left_join(
+    m18_class_lookup,
+    by = ".mplus_class"
+  ) |>
+  dplyr::mutate(
+    class_label = factor(
+      class_label,
+      levels =
+        m18_class_lookup$class_label
     )
+  ) |>
+  dplyr::arrange(
+    class_label,
+    time_score
   )
 
-  ggplot2::ggsave(
-    filename = png_path,
-    plot = plot,
-    width = width,
-    height = height,
-    units = "in",
-    dpi = 600,
-    bg = "white"
+
+##### CALCULATE ESTIMATES AT THE SEVEN PERIOD MIDPOINTS ####
+
+m18_period_estimates <- merge(
+  m18_growth_means,
+  developmental_period_data,
+  by = NULL
+) |>
+  tibble::as_tibble() |>
+  dplyr::mutate(
+    estimate = bur_i +
+      bur_s * time_score +
+      bur_q * time_score^2
+  ) |>
+  dplyr::left_join(
+    m18_class_lookup,
+    by = ".mplus_class"
+  ) |>
+  dplyr::mutate(
+    class_label = factor(
+      class_label,
+      levels =
+        m18_class_lookup$class_label
+    )
+  ) |>
+  dplyr::arrange(
+    class_label,
+    period_order
   )
 
-  ggplot2::ggsave(
-    filename = pdf_path,
-    plot = plot,
-    width = width,
-    height = height,
-    units = "in",
-    device = grDevices::cairo_pdf
+
+##### CHECK PLOTTED VALUES ####
+
+m18_period_estimates |>
+  dplyr::select(
+    class_name,
+    period,
+    time_score,
+    estimate
+  ) |>
+  print(
+    n = Inf
   )
 
+
+##### DEFINE FIGURE COLORS AND LINE TYPES ####
+
+m18_class_colors <- stats::setNames(
   c(
-    PNG = png_path,
-    PDF = pdf_path
-  )
-}
+    "#0072B2",
+    "#009E73",
+    "#D55E00"
+  ),
+  m18_class_lookup$class_label
+)
+
+m18_class_linetypes <- stats::setNames(
+  c(
+    "solid",
+    "longdash",
+    "dotdash"
+  ),
+  m18_class_lookup$class_label
+)
 
 
-#-----------------------------------------------------------------------
-##### VISUAL SETTINGS #####
-#-----------------------------------------------------------------------
+##### DEFINE CLASS ORDER AND LEGEND LABELS ####
 
-if (classification_variant == "original") {
+m18_class_order <- c(
+  "Moderate/early-increasing burden (n = 223; 73.6%)",
+  "Elevated/declining burden (n = 42; 13.9%)",
+  "High/rebound burden (n = 38; 12.5%)"
+)
 
-  class_colours <- c(
-    "Low and stable" = "#1B9E77",
-    "Elevated and declining" = "#D95F02",
-    "High early burden with later rebound" = "#355C9A"
-  )
+m18_class_legend_labels <- stats::setNames(
+  parse(
+    text = c(
+      '"Moderate/early-increasing burden"~"("*italic(n)~"="~223*"; 73.6%)"',
+      '"Elevated/declining burden"~"("*italic(n)~"="~42*"; 13.9%)"',
+      '"High/rebound burden"~"("*italic(n)~"="~38*"; 12.5%)"'
+    )
+  ),
+  m18_class_order
+)
 
-  class_linetypes <- c(
-    "Low and stable" = "solid",
-    "Elevated and declining" = "longdash",
-    "High early burden with later rebound" = "dotdash"
-  )
+m18_figure_note <- stringr::str_wrap(
+  paste(
+    "Note. Maltreatment burden scores are composites of standardized",
+    "indicators of subtype count, frequency, and severity.",
+    "Negative values indicate burden below the mean of the reference",
+    "sample used for standardization and do not represent negative",
+    "maltreatment exposure."
+  ),
+  width = 125
+)
 
-  class_shapes <- c(
-    "Low and stable" = 16,
-    "Elevated and declining" = 17,
-    "High early burden with later rebound" = 15
-  )
 
-} else {
 
-  class_colours <- c(
-    "Non-maltreated" = "#666666",
-    "Moderate/early-increasing burden" = "#1B9E77",
-    "Elevated/declining burden" = "#D95F02",
-    "High/rebound burden" = "#355C9A"
-  )
+##### DEFINE DEVELOPMENTAL PERIOD LABELS ####
 
-  class_linetypes <- c(
-    "Non-maltreated" = "solid",
-    "Moderate/early-increasing burden" = "dashed",
-    "Elevated/declining burden" = "longdash",
-    "High/rebound burden" = "dotdash"
-  )
+developmental_period_labels <- c(
+  "Infancy",
+  "Toddlerhood",
+  "Preschool age",
+  "Early school age",
+  "Late school age",
+  "Adolescence",
+  "Young adulthood"
+)
 
-  class_shapes <- c(
-    "Non-maltreated" = 16,
-    "Moderate/early-increasing burden" = 18,
-    "Elevated/declining burden" = 17,
-    "High/rebound burden" = 15
-  )
-}
+
+##### VERIFY PLOT DEFINITIONS ####
 
 stopifnot(
   identical(
-    names(class_colours),
-    class_labels
+    m18_class_order,
+    names(m18_class_colors)
   ),
-  identical(
-    names(class_linetypes),
-    class_labels
+  all(
+    m18_class_order %in%
+      unique(
+        as.character(
+          m18_trajectory_data$class_label
+        )
+      )
   ),
-  identical(
-    names(class_shapes),
-    class_labels
-  )
+  length(developmental_period_labels) ==
+    nrow(developmental_period_data)
 )
 
-base_theme <- ggplot2::theme_classic(
-  base_family = "Arial",
-  base_size = 12
+
+##### CREATE FIGURE ####
+
+m18_figure <- ggplot2::ggplot(
+  m18_trajectory_data,
+  ggplot2::aes(
+    x = time_score,
+    y = estimate,
+    color = class_label,
+    fill = class_label,
+    group = class_label
+  )
 ) +
-  ggplot2::theme(
-    plot.title = ggplot2::element_blank(),
-    plot.subtitle = ggplot2::element_blank(),
-    plot.caption = ggplot2::element_blank(),
-    axis.title = ggplot2::element_text(
-      size = 14,
-      face = "bold",
-      colour = "black"
+  ggplot2::geom_hline(
+    yintercept = 0,
+    linetype = "dashed",
+    linewidth = 0.45,
+    color = "grey55"
+  ) +
+  ggplot2::geom_ribbon(
+    ggplot2::aes(
+      ymin = ci_lower,
+      ymax = ci_upper
     ),
-    axis.text.x = ggplot2::element_text(
-      size = 12,
-      face = "bold",
-      colour = "black"
+    alpha = 0.16,
+    color = NA,
+    show.legend = FALSE
+  ) +
+  ggplot2::geom_line(
+    linewidth = 1.15,
+    linetype = "solid",
+    show.legend = TRUE
+  ) +
+  ggplot2::geom_point(
+    data = m18_period_estimates,
+    mapping = ggplot2::aes(
+      x = time_score,
+      y = estimate,
+      color = class_label,
+      group = class_label
     ),
-    axis.text.y = ggplot2::element_text(
-      size = 13,
-      colour = "black"
-    ),
-    axis.line = ggplot2::element_line(
-      colour = "black",
-      linewidth = 0.75
-    ),
-    axis.ticks = ggplot2::element_line(
-      colour = "black",
-      linewidth = 0.65
-    ),
-    strip.background = ggplot2::element_blank(),
-    strip.text = ggplot2::element_text(
-      size = 14,
-      face = "bold",
-      colour = "black",
-      margin = ggplot2::margin(
-        b = 10
+    inherit.aes = FALSE,
+    size = 2.7,
+    show.legend = FALSE
+  ) +
+  ggplot2::scale_x_continuous(
+    breaks = developmental_period_data$time_score,
+    labels = developmental_period_labels,
+    expand = ggplot2::expansion(
+      mult = c(
+        0.025,
+        0.025
       )
     ),
-    panel.grid.major.y = ggplot2::element_line(
-      colour = "grey88",
-      linewidth = 0.40
+    guide = ggplot2::guide_axis(
+      angle = 35
+    )
+  ) +
+  ggplot2::scale_y_continuous(
+    breaks = c(
+      -1,
+      0,
+      2,
+      4,
+      6,
+      8,
+      10
     ),
-    panel.grid.major.x = ggplot2::element_blank(),
-    panel.grid.minor = ggplot2::element_blank(),
+    expand = ggplot2::expansion(
+      mult = c(
+        0.03,
+        0.06
+      )
+    )
+  ) +
+  ggplot2::scale_color_manual(
+    values = m18_class_colors,
+    breaks = m18_class_order,
+    labels = unname(
+      m18_class_legend_labels[
+        m18_class_order
+      ]
+    ),
+    drop = FALSE
+  ) +
+  ggplot2::scale_fill_manual(
+    values = m18_class_colors,
+    breaks = m18_class_order,
+    drop = FALSE
+  ) +
+  ggplot2::labs(
+    x = "DEVELOPMENTAL PERIOD",
+    y = "ESTIMATED MALTREATMENT BURDEN",
+    color = NULL,
+    fill = NULL,
+    caption = m18_figure_note
+  ) +
+  ggplot2::guides(
+    fill = "none",
+    color = ggplot2::guide_legend(
+      override.aes = list(
+        linewidth = 1.15,
+        linetype = "solid",
+        alpha = 1
+      )
+    )
+  ) +
+  ggplot2::theme_classic(
+    base_size = 11,
+    base_family = "Times New Roman"
+  ) +
+  ggplot2::theme(
+    axis.text.x = ggplot2::element_text(
+      face = "bold",
+      size = 9,
+      hjust = 1,
+      vjust = 1
+    ),
+    axis.title.x = ggplot2::element_text(
+      face = "bold",
+      margin = ggplot2::margin(
+        t = 8
+      )
+    ),
+    axis.title.y = ggplot2::element_text(
+      face = "bold",
+      margin = ggplot2::margin(
+        r = 8
+      )
+    ),
+    legend.position = "inside",
+    legend.position.inside = c(
+      0.62,
+      0.88
+    ),
+    legend.justification = c(
+      0.5,
+      0.5
+    ),
+    legend.text = ggplot2::element_text(
+      size = 8.5
+    ),
+    legend.background = ggplot2::element_rect(
+      fill = scales::alpha(
+        "white",
+        0.85
+      ),
+      color = NA
+    ),
+    legend.key.width = grid::unit(
+      25,
+      "pt"
+    ),
+    plot.caption.position = "plot",
+    plot.caption = ggplot2::element_text(
+      hjust = 0,
+      size = 9,
+      face = "plain",
+      lineheight = 1,
+      margin = ggplot2::margin(
+        t = 10
+      )
+    ),
     plot.margin = ggplot2::margin(
       t = 10,
-      r = 20,
-      b = 10,
-      l = 10
+      r = 12,
+      b = 8,
+      l = 8
     )
   )
 
+
+##### DISPLAY FIGURE ####
+
+m18_figure
+
+##### SAVE FIGURE ####
+
+dir.create(
+  man_figure_dir,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+figure_output_file <- file.path(
+  man_figure_dir,
+  paste0(
+    "Figure_",
+    figure_number,
+    "_maltreatment_burden_trajectory_classes.tiff"
+  )
+)
+
+ggplot2::ggsave(
+  filename = figure_output_file,
+  plot = m18_figure,
+  width = 7,
+  height = 5,
+  units = "in",
+  dpi = 600,
+  compression = "lzw",
+  bg = "white"
+)
+
+if (interactive()) {
+  print(
+    m18_figure
+  )
+}
+
+message(
+  "Saved Figure ",
+  figure_number,
+  ": ",
+  figure_output_file
+)
 
 #-----------------------------------------------------------------------
 ##### READ PARAMETERS #####
