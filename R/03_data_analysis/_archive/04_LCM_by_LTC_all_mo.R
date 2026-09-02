@@ -3,7 +3,6 @@ source(
   "C:/Users/keil/Documents/main_outcome_amis2/R/03_data_analysis/00_setup_standardized.R"
 )
 
-
 #-------------------------------------------------------------------------
 ##### CLASSIFICATION VARIANT ####
 #-------------------------------------------------------------------------

@@ -6,114 +6,112 @@ source("C:/Users/keil/Documents/main_outcome_amis2/R/03_data_analysis/00_setup_s
 
 check_packages(
   c(
-    "MplusAutomation",
+    "dplyr",
+    "tidyr",
+    "purrr",
+    "stringr",
+    "readxl",
+    "writexl",
     "officer",
     "flextable"
   ),
   required = TRUE
 )
 
+suppressPackageStartupMessages({
+  library(officer)
+  library(flextable)
+})
+
+final_excel_file_mo <- file.path(
+  data_prep_dir,
+  "AMIS_merged_analysis_dataset_final_mo.xlsx"
+)
+
+
+#-----------------------------------------------------------------------
+##### DEFINE FINAL OPTION-B CLASSIFICATION #####
+#-----------------------------------------------------------------------
+
+classification_variant <- "mo"
+
+class_var <- "mt_class_mo"
+class_prob_var <- "mt_prob_max_mo"
+
+class_prob_vars <- c(
+  "mt_prob_class1_mo",
+  "mt_prob_class2_mo",
+  "mt_prob_class3_mo",
+  "mt_prob_class4_mo"
+)
+
+# Combined four-group coding:
+# 1 = externally defined non-maltreated reference group
+# 2 = final M18 c#1
+# 3 = final M18 c#2
+# 4 = final M18 c#3
+class_levels <- 1:4
+
+class_labels <- c(
+  "Non-maltreated",
+  "Moderate/early-increasing burden",
+  "Elevated/declining burden",
+  "High/rebound burden"
+)
+
+expected_class_sizes <- c(
+  `1` = 281L,
+  `2` = 223L,
+  `3` = 42L,
+  `4` = 38L
+)
+
+expected_m18_avepp <- c(
+  `2` = 0.986,
+  `3` = 0.991,
+  `4` = 0.941
+)
+
+class_input_file <- m18b_excel_file_mo
+prepared_rds_file <- m18b_prepared_rds_file_mo
+class_results_file <- m18b_class_checks_file_mo
+
+table_number <- "SX"
+
+word_output_file <- file.path(
+  supplement_dir,
+  paste0(
+    "Table_",
+    table_number,
+    "_class_characteristics_APA.docx"
+  )
+)
+class_label_lookup <- tibble(
+  class_value = class_levels,
+  class_label = class_labels
+)
+
+
 #-------------------------------------------------------------------------
 ##### CHECK INPUT FILE #####
 #-------------------------------------------------------------------------
 
-if (
-  !exists(
-    "class_input_file"
-  )
-) {
-  stop(
-    "class_input_file has not been defined. ",
-    "Define classification_variant and the corresponding input file first."
-  )
-}
-
-if (
-  !file.exists(
-    class_input_file
-  )
-) {
+if (!file.exists(class_input_file)) {
   stop(
     "Input file not found: ",
     class_input_file
   )
 }
 
-
-#-----------------------------------------------------------------------
-##### DEFINE CLASSIFICATION VARIANT #####
-#-----------------------------------------------------------------------
-
-# "original" = ursprüngliche M18-Klassen aus der Gesamtstichprobe
-# "mo"       = M18b-Klassen unter den Misshandelten plus
-#              externe Non-maltreated-Referenzgruppe
-
-classification_variant <- "mo"
-
-if (classification_variant == "original") {
-  
-  class_var <- "mt_class"
-  class_label_var <- "mt_class_label"
-  class_prob_var <- "mt_prob_max"
-  
-  class_prob_vars <- c(
-    "mt_prob_class1",
-    "mt_prob_class2",
-    "mt_prob_class3"
-  )
-  
-  class_levels <- 1:3
-  
-  class_labels <- c(
-    "Low/stable burden",
-    "Elevated/declining burden",
-    "Very high/rebound burden"
-  )
-  
-  class_input_file <- m18_excel_file
-  
-  prepared_rds_file <- m18_prepared_rds_file
-  class_results_file <- m18_class_checks_file
-  
-} else if (classification_variant == "mo") {
-  
-  class_var <- "mt_class_mo"
-  class_label_var <- "mt_class_label_mo"
-  class_prob_var <- "mt_prob_max_mo"
-  
-  class_prob_vars <- c(
-    "mt_prob_class1_mo",
-    "mt_prob_class2_mo",
-    "mt_prob_class3_mo",
-    "mt_prob_class4_mo"
-  )
-  
-  class_levels <- 1:4
-  
-  class_labels <- c(
-    "Non-maltreated",
-    "Moderate/early-increasing burden",
-    "Elevated/declining burden",
-    "High/rebound burden"
-  )
-  
-  class_input_file <- m18b_excel_file_mo
-  
-  prepared_rds_file <- m18b_prepared_rds_file_mo
-  class_results_file <- m18b_class_checks_file_mo
-  
-} else {
-  
-  stop(
-    "classification_variant must be either 'original' or 'mo'."
-  )
-}
 #-----------------------------------------------------------------------
 ##### DEFINE VARIABLES #####
 #-----------------------------------------------------------------------
 
 ##### SDQ VARIABLES #####
 
+# First caregiver, participant, and second caregiver only.
+# Teacher reports are deliberately excluded because they are not included
+# in the final latent change models.
 informants <- c("b", "k", "p")
 timepoints <- c("t2", "t5")
 
@@ -282,7 +280,8 @@ req <- unique(
     emotion_vars,
     conduct_vars,
     hyper_vars,
-    mal_t1_vars
+    mal_t1_vars,
+    mal_t2all_vars
   )
 )
 
@@ -368,37 +367,60 @@ if (
 
 
 
-##### CHECK MALTREATED-ONLY CLASS ASSIGNMENT #####
+##### CHECK FINAL OPTION-B GROUP ASSIGNMENT #####
+
+mo_class_counts <- d |>
+  filter(
+    !is.na(
+      .data[[class_var]]
+    )
+  ) |>
+  count(
+    class = .data[[class_var]],
+    name = "n"
+  ) |>
+  arrange(
+    class
+  )
+
+print(
+  mo_class_counts,
+  n = Inf
+)
+
+observed_class_sizes <- stats::setNames(
+  mo_class_counts$n,
+  as.character(
+    mo_class_counts$class
+  )
+)
 
 if (
-  classification_variant == "mo"
-) {
-  
-  mo_class_counts <- d |>
-    count(
-      class = .data[[class_var]],
-      name = "n"
-    ) |>
-    arrange(
-      class
-    )
-  
-  print(
-    mo_class_counts,
-    n = Inf
+  !identical(
+    names(observed_class_sizes),
+    names(expected_class_sizes)
+  ) ||
+  !identical(
+    as.integer(observed_class_sizes),
+    as.integer(expected_class_sizes)
   )
-  
-  if (
-    !all(
-      na.omit(
-        d[[class_var]]
-      ) %in% 1:4
+) {
+  stop(
+    paste0(
+      "The final Option-B group sizes do not match the expected ",
+      "281/223/42/38 distribution. Observed sizes: ",
+      paste(
+        paste0(
+          names(observed_class_sizes),
+          " = ",
+          observed_class_sizes
+        ),
+        collapse = ", "
+      ),
+      ". Check whether the current final M18 CPROBABILITIES export ",
+      "and class-label mapping were used."
     )
-  ) {
-    stop(
-      "The maltreated-only classification contains values outside classes 1–4."
-    )
-  }
+  )
 }
 
 
@@ -547,8 +569,14 @@ for (v in mal_base) {
 
 d <- d %>%
   mutate(
-    mt_age_t2_years = mt_age_t2 / 12,
-    mt_age_t5_years = mt_age_t5 / 12
+    mt_age_t2_months = as.numeric(
+      mt_age_t2
+    ),
+    mt_age_t5_months = as.numeric(
+      mt_age_t5
+    ),
+    mt_age_t2_years = mt_age_t2_months / 12,
+    mt_age_t5_years = mt_age_t5_months / 12
   )
 
 
@@ -779,17 +807,9 @@ print(
 n_samp <- tibble(
   sample = c(
     "Full Excel dataset",
-    paste0(
-      "Full ",
-      classification_variant,
-      " class sample"
-    ),
+    "Full Option-B group sample",
     "LCS sample: stat_t5 NE 0",
-    paste0(
-      "LCS sample with ",
-      classification_variant,
-      " class assignment"
-    )
+    "LCS sample with Option-B group assignment"
   ),
   
   n = c(
@@ -900,7 +920,27 @@ sum_cls <- d_cls %>%
       n_lcs /
       sum(
         n_lcs
+      ),
+
+    # The non-maltreated reference group was externally defined and has
+    # no latent-class classification uncertainty. Its synthetic one-hot
+    # probabilities are therefore not reported as classification quality.
+    across(
+      c(
+        prob_mean,
+        prob_sd,
+        prob_min,
+        prob_ge70_pct,
+        starts_with(
+          "avepp_class"
+        )
+      ),
+      ~ if_else(
+        analysis_class_number == 1L,
+        NA_real_,
+        as.numeric(.x)
       )
+    )
   ) %>%
   relocate(
     class_pct,
@@ -913,6 +953,54 @@ sum_cls <- d_cls %>%
   arrange(
     analysis_class_number
   )
+
+
+##### VERIFY FINAL M18 CLASS MAPPING WITH AVEPP #####
+
+observed_m18_avepp <- vapply(
+  2:4,
+  function(class_number) {
+    sum_cls[[
+      paste0(
+        "avepp_class",
+        class_number
+      )
+    ]][
+      sum_cls$analysis_class_number ==
+        class_number
+    ]
+  },
+  numeric(1)
+)
+
+names(observed_m18_avepp) <- as.character(
+  2:4
+)
+
+if (
+  any(
+    abs(
+      observed_m18_avepp -
+        expected_m18_avepp
+    ) > 0.005
+  )
+) {
+  stop(
+    paste0(
+      "The class-specific average posterior probabilities do not match ",
+      "the final M18 solution (.986/.991/.941). Observed values: ",
+      paste(
+        formatC(
+          observed_m18_avepp,
+          format = "f",
+          digits = 3
+        ),
+        collapse = "/"
+      ),
+      ". Check the current M18 class mapping and probability columns."
+    )
+  )
+}
 
 
 ##### INSPECT SAMPLE AND CLASS OVERVIEW #####
@@ -1547,7 +1635,7 @@ psy_meta <- bind_rows(
   
   sdq_grid %>%
     transmute(
-      domain = "Externalising problems",
+      domain = "Externalizing problems",
       informant,
       timepoint,
       variable = paste0(
@@ -1563,7 +1651,7 @@ psy_meta <- bind_rows(
       domain,
       levels = c(
         "Emotional problems",
-        "Externalising problems"
+        "Externalizing problems"
       )
     ),
     
@@ -1681,16 +1769,6 @@ tab_available_n <- bind_rows(
 
 
 #-----------------------------------------------------------------------
-##### COMBINE AVAILABLE SAMPLE SIZES #####
-#-----------------------------------------------------------------------
-
-tab_available_n <- bind_rows(
-  tab_demo_n,
-  tab_psy_n,
-  tab_mal_n
-)
-
-#-----------------------------------------------------------------------
 ##### SAVE PREPARED DATA #####
 #-----------------------------------------------------------------------
 
@@ -1708,7 +1786,10 @@ write_xlsx(
   list(
     sample_sizes = n_samp,
     class_key = class_key,
+    classification_check = classification_check_summary,
     class_overview = sum_cls,
+    retention_counts = ret_counts,
+    retention_test = sum_ret,
     demographics_APA = tab_demo_apa,
     psychopathology_APA = tab_psy_apa,
     maltreatment_APA = tab_mal_apa,
@@ -1754,8 +1835,8 @@ print(
 
 
 cat(
-  "\nClassification variant:\n",
-  classification_variant,
+  "\nClassification strategy:\n",
+  "Final Option B",
   "\n\nPrepared dataset saved to:\n",
   prepared_rds_file,
   "\n\nResults saved to:\n",
@@ -1764,509 +1845,3 @@ cat(
   sep = ""
 )
 
-#-----------------------------------------------------------------------
-##### CREATE APA-STYLE WORD TABLE #####
-#-----------------------------------------------------------------------
-#-----------------------------------------------------------------------
-##### CREATE APA-STYLE WORD TABLE #####
-#-----------------------------------------------------------------------
-
-##### COMBINE TABLE SECTIONS #####
-
-tab_apa <- bind_rows(
-  tab_demo_apa,
-  tab_psy_apa,
-  tab_mal_apa
-) %>%
-  select(
-    section,
-    characteristic,
-    all_of(
-      class_columns
-    ),
-    test,
-    p,
-    effect_size
-  )
-
-
-##### DEFINE INTERNAL CLASS COLUMN NAMES #####
-
-class_internal_names <- paste0(
-  "class",
-  seq_along(
-    class_levels
-  )
-)
-
-internal_column_names <- c(
-  "overall",
-  class_internal_names
-)
-
-
-##### REPLACE DISPLAY NAMES WITH SHORT INTERNAL NAMES #####
-
-names(tab_apa)[
-  match(
-    class_columns,
-    names(tab_apa)
-  )
-] <- internal_column_names
-
-
-##### INSERT SECTION HEADINGS AS SEPARATE ROWS #####
-
-section_order <- unique(
-  tab_apa$section
-)
-
-tab_word <- map_dfr(
-  section_order,
-  function(current_section) {
-    
-    section_row <- tibble(
-      section = current_section,
-      characteristic = current_section
-    )
-    
-    for (
-      current_column in c(
-        internal_column_names,
-        "test",
-        "p",
-        "effect_size"
-      )
-    ) {
-      section_row[[current_column]] <- ""
-    }
-    
-    section_data <- tab_apa %>%
-      filter(
-        section == current_section
-      )
-    
-    bind_rows(
-      section_row,
-      section_data
-    )
-  }
-) %>%
-  select(
-    -section
-  )
-
-
-##### IDENTIFY SECTION ROWS #####
-
-section_rows <- which(
-  tab_word$characteristic %in%
-    section_order
-)
-
-
-##### CLASS SIZES FOR COLUMN HEADERS #####
-
-n_overall <- nrow(
-  d_cls
-)
-
-class_sizes <- class_key %>%
-  complete(
-    analysis_class_number = class_levels,
-    fill = list(
-      n = 0
-    )
-  ) %>%
-  arrange(
-    analysis_class_number
-  ) %>%
-  pull(
-    n
-  )
-
-
-##### CREATE DYNAMIC HEADER LABELS #####
-
-header_labels <- c(
-  characteristic = "Characteristic",
-  
-  overall = paste0(
-    "Overall\n(N = ",
-    n_overall,
-    ")"
-  )
-)
-
-for (
-  class_index in seq_along(
-    class_levels
-  )
-) {
-  
-  current_internal_name <- class_internal_names[
-    class_index
-  ]
-  
-  header_labels[
-    current_internal_name
-  ] <- paste0(
-    "Class ",
-    class_levels[class_index],
-    "\n",
-    class_labels[class_index],
-    "\n(n = ",
-    class_sizes[class_index],
-    ")"
-  )
-}
-
-header_labels <- c(
-  header_labels,
-  test = "Test",
-  p = "p",
-  effect_size = "Effect size"
-)
-
-
-##### BUILD FLEXTABLE #####
-
-ft_apa <- flextable(
-  tab_word
-)
-
-ft_apa <- do.call(
-  set_header_labels,
-  c(
-    list(
-      x = ft_apa
-    ),
-    as.list(
-      header_labels
-    )
-  )
-)
-
-ft_apa <- ft_apa %>%
-  theme_booktabs() %>%
-  
-  font(
-    fontname = "Times New Roman",
-    part = "all"
-  ) %>%
-  
-  fontsize(
-    size = 9,
-    part = "all"
-  ) %>%
-  
-  bold(
-    part = "header"
-  ) %>%
-  
-  align(
-    j = "characteristic",
-    align = "left",
-    part = "all"
-  ) %>%
-  
-  align(
-    j = c(
-      internal_column_names,
-      "test",
-      "p",
-      "effect_size"
-    ),
-    align = "center",
-    part = "all"
-  ) %>%
-  
-  valign(
-    valign = "center",
-    part = "all"
-  ) %>%
-  
-  padding(
-    padding.top = 2,
-    padding.bottom = 2,
-    padding.left = 2,
-    padding.right = 2,
-    part = "all"
-  ) %>%
-  
-  set_table_properties(
-    layout = "fixed",
-    width = 1
-  )
-
-
-##### FORMAT SECTION HEADINGS #####
-
-for (row in section_rows) {
-  
-  ft_apa <- ft_apa %>%
-    merge_at(
-      i = row,
-      j = seq_len(
-        ncol(
-          tab_word
-        )
-      ),
-      part = "body"
-    ) %>%
-    
-    bold(
-      i = row,
-      bold = TRUE,
-      part = "body"
-    ) %>%
-    
-    align(
-      i = row,
-      align = "left",
-      part = "body"
-    ) %>%
-    
-    padding(
-      i = row,
-      padding.top = 7,
-      padding.bottom = 3,
-      part = "body"
-    )
-}
-
-
-##### SET COLUMN WIDTHS #####
-
-ft_apa <- ft_apa %>%
-  width(
-    j = "characteristic",
-    width = if (
-      classification_variant == "mo"
-    ) {
-      2.40
-    } else {
-      2.70
-    }
-  ) %>%
-  
-  width(
-    j = "overall",
-    width = 0.95
-  ) %>%
-  
-  width(
-    j = class_internal_names,
-    width = if (
-      classification_variant == "mo"
-    ) {
-      1.20
-    } else {
-      1.35
-    }
-  ) %>%
-  
-  width(
-    j = "test",
-    width = 1.10
-  ) %>%
-  
-  width(
-    j = "p",
-    width = 0.50
-  ) %>%
-  
-  width(
-    j = "effect_size",
-    width = 0.80
-  ) %>%
-  
-  set_table_properties(
-    layout = "fixed",
-    width = 1,
-    opts_word = list(
-      split = FALSE,
-      keep_with_next = FALSE
-    )
-  )
-
-
-#-----------------------------------------------------------------------
-##### DEFINE DYNAMIC TABLE TITLE, NOTE, AND OUTPUT FILE #####
-#-----------------------------------------------------------------------
-
-if (
-  classification_variant == "original"
-) {
-  
-  table_title <- paste0(
-    "Characteristics of the Maltreatment Burden Trajectory Classes"
-  )
-  
-  table_note_text <- paste0(
-    "Values are M (SD) for continuous variables and n (%) for categorical ",
-    "variables. Percentages are based on the available data for each variable. ",
-    "Externalising problems were calculated as the sum of the SDQ conduct ",
-    "problems and hyperactivity/inattention subscales. Harmonised maltreatment ",
-    "indicators were based on the cumulative T2-all variable when available ",
-    "and otherwise on the corresponding T1 variable, thereby reflecting the ",
-    "maximum available maltreatment history for each participant. Values were ",
-    "coded as missing when both variables were missing. The three maltreatment ",
-    "burden trajectory classes were estimated in the full trajectory-analysis ",
-    "sample. Inferential tests compare the classes for demographic ",
-    "characteristics and psychopathology. No inferential tests are reported ",
-    "for maltreatment characteristics used to describe the trajectory classes. ",
-    "η² = eta squared; V = Cramér's V; — = not estimated."
-  )
-  
-  word_output_file <- m18_word_file
-  
-} else if (
-  classification_variant == "mo"
-) {
-  
-  table_title <- paste0(
-    "Characteristics of the Non-Maltreated Reference Group and ",
-    "Maltreatment Burden Trajectory Classes"
-  )
-  
-  table_note_text <- paste0(
-    "Values are M (SD) for continuous variables and n (%) for categorical ",
-    "variables. Percentages are based on the available data for each variable. ",
-    "Externalising problems were calculated as the sum of the SDQ conduct ",
-    "problems and hyperactivity/inattention subscales. Harmonised maltreatment ",
-    "indicators were based on the cumulative T2-all variable when available ",
-    "and otherwise on the corresponding T1 variable, thereby reflecting the ",
-    "maximum available maltreatment history for each participant. Values were ",
-    "coded as missing when both variables were missing. Class 1 is an externally ",
-    "defined non-maltreated reference group. Classes 2–4 are the three latent ",
-    "maltreatment burden trajectory classes estimated among participants ",
-    "classified as maltreated. The non-maltreated reference group was not ",
-    "included in the latent trajectory-class estimation. Inferential tests ",
-    "compare the four displayed groups for demographic characteristics and ",
-    "psychopathology. No inferential tests are reported for maltreatment ",
-    "characteristics because maltreatment status was used to define the ",
-    "non-maltreated reference group. η² = eta squared; V = Cramér's V; ",
-    "— = not estimated."
-  )
-  
-  word_output_file <- m18b_word_file_mo
-  
-} else {
-  
-  stop(
-    "classification_variant must be either 'original' or 'mo'."
-  )
-}
-
-
-#-----------------------------------------------------------------------
-##### CREATE WORD DOCUMENT #####
-#-----------------------------------------------------------------------
-
-doc <- read_docx()
-
-
-##### LANDSCAPE PAGE FORMAT #####
-
-landscape_section <- prop_section(
-  page_size = page_size(
-    orient = "landscape"
-  ),
-  
-  page_margins = page_mar(
-    top = 0.55,
-    bottom = 0.55,
-    left = 0.55,
-    right = 0.55
-  )
-)
-
-doc <- body_set_default_section(
-  doc,
-  landscape_section
-)
-
-
-##### TABLE NUMBER #####
-
-doc <- body_add_fpar(
-  doc,
-  fpar(
-    ftext(
-      "Table 1",
-      fp_text(
-        font.family = "Times New Roman",
-        font.size = 11,
-        bold = TRUE
-      )
-    )
-  )
-)
-
-
-##### TABLE TITLE #####
-
-doc <- body_add_fpar(
-  doc,
-  fpar(
-    ftext(
-      table_title,
-      fp_text(
-        font.family = "Times New Roman",
-        font.size = 11,
-        italic = TRUE
-      )
-    )
-  )
-)
-
-
-##### ADD TABLE #####
-
-doc <- body_add_flextable(
-  doc,
-  ft_apa
-)
-
-
-##### APA TABLE NOTE #####
-
-doc <- body_add_fpar(
-  doc,
-  fpar(
-    ftext(
-      "Note. ",
-      fp_text(
-        font.family = "Times New Roman",
-        font.size = 9,
-        italic = TRUE
-      )
-    ),
-    
-    ftext(
-      table_note_text,
-      fp_text(
-        font.family = "Times New Roman",
-        font.size = 9
-      )
-    )
-  )
-)
-
-
-##### SAVE WORD DOCUMENT #####
-
-print(
-  doc,
-  target = word_output_file
-)
-
-cat(
-  "\nClassification variant:\n",
-  classification_variant,
-  "\n\nAPA-style Word table saved to:\n",
-  word_output_file,
-  "\n",
-  sep = ""
-)

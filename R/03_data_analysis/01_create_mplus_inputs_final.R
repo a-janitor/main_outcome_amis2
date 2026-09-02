@@ -3172,8 +3172,8 @@ stopifnot(
 
 ##### DEFINE MIXTURE-MODEL START SETTINGS ####
 
-mixture_starts_initial <- 4000L
-mixture_starts_final <- 1000L
+mixture_starts_initial <- 1000L
+mixture_starts_final <- 250L
 
 mixture_lrt_starts <- c(
   0L,
@@ -3264,33 +3264,7 @@ create_burden_mixture_input <- function(
     class_word
   )
   
-  ##### SELECT MODEL-SPECIFIC OPTSEED
-  
-  model_optseed <- unname(
-    optseed_by_classes[
-      as.character(number_of_classes)
-    ]
-  )
-  
-  if (
-    length(model_optseed) != 1L ||
-    is.na(model_optseed)
-  ) {
-    stop(
-      "No OPTSEED defined for ",
-      number_of_classes,
-      " classes."
-    )
-  }
-  
-  message(
-    model_id,
-    ": ",
-    number_of_classes,
-    " classes; OPTSEED = ",
-    model_optseed
-  )
-  
+ 
   ##### CREATE LABELED CLASS-SPECIFIC MEAN SYNTAX ####
   
   class_specific_means_syntax <- paste(
@@ -3495,9 +3469,19 @@ create_burden_mixture_input <- function(
     "ANALYSIS:\n",
     "  TYPE = MIXTURE;\n",
     "  ESTIMATOR = MLR;\n",
-    "  STARTS = 0;\n",
-    "  OPTSEED = ",
-    model_optseed,
+    "  STARTS = ",
+    mixture_starts_initial,
+    " ",
+    mixture_starts_final,
+    ";\n",
+    "  STITERATIONS = ",
+    mixture_stiterations,
+    ";\n",
+    "  LRTSTARTS = ",
+    paste(
+      mixture_lrt_starts,
+      collapse = " "
+    ),
     ";\n",
     "  PROCESSORS = 4;\n\n",
     
@@ -3532,12 +3516,15 @@ create_burden_mixture_input <- function(
     class_specific_means_syntax,
     "\n\n",
     
-    trajectory_model_constraint_syntax,
-    "\n",
+    # trajectory_model_constraint_syntax,
+    # "\n",
     
     "OUTPUT:\n",
     "  TECH1;\n",
-    "  TECH8;\n\n",
+    "  TECH3;\n",
+    "  TECH8;\n",
+    "  TECH11;\n",
+    "  TECH14;\n\n",
     
     "SAVEDATA:\n",
     "  FILE = ",
@@ -3602,11 +3589,8 @@ create_burden_mixture_input <- function(
         "random-start settings are STARTS =",
         mixture_starts_initial,
         mixture_starts_final,
-        "and LRTSTARTS =",
-        paste(
-          mixture_lrt_starts,
-          collapse = " "
-        ),
+        "and STITERATIONS =",
+        mixture_stiterations,
         "; posterior class probabilities and most likely",
         "class membership are saved using",
         "SAVE = CPROBABILITIES;",
@@ -4058,219 +4042,1354 @@ if (isTRUE(run_mplus_models)) {
 
 
 
-# #-------------------------------------------------------------------------
-# ##### SYNCHRONIZE AND ARCHIVE COMPLETED MPLUS MODELS #########
-# #-------------------------------------------------------------------------
-# ##### DEFINE MODEL ROUTING ####
-# model_routing <- list(
-#   measurement = list(
-#     files = c(
-#       "02_sdq_residuals_free",
-#       "04_sdq_within_informant_crossscale",
-#       "05_sdq_between_informant_residuals"
-#     ),
-#     github_dir = github_measurement_dir,
-#     results_dir = mplus_results_dir_measurement
-#   ),
-#   
-#   invariance = list(
-#     files = c(
-#       "01_sdq_configural",
-#       "03_sdq_metric_invariance",
-#       "06_sdq_full_scalar_invariance",
-#       "07_sdq_partial_scalar_invariance"
-#     ),
-#     github_dir = github_invariance_dir,
-#     results_dir = mplus_results_dir_invariance
-#   ),
-#   
-#   lcs = list(
-#     files = c(
-#       "08_sdq_classical_lcs"
-#     ),
-#     github_dir = github_lcs_dir,
-#     results_dir = mplus_results_dir_lcs
-#   )
-# )
-# 
-# ##### DEFINE ARCHIVE ####
-# archive_root <- file.path(
-#   mplus_input_dir,
-#   "archive"
-# )
-# 
-# archive_stamp <- format(
-#   Sys.time(),
-#   "%Y-%m-%d_%H%M"
-# )
-# 
-# dir.create(
-#   archive_root,
-#   recursive = TRUE,
-#   showWarnings = FALSE
-# )
-# 
-# ##### DEFINE CHECKED COPY FUNCTION ####
-# copy_files_checked <- function(
-#     files,
-#     target_dir
-# ) {
-#   
-#   if (length(files) == 0) {
-#     return(invisible(TRUE))
-#   }
-#   
-#   dir.create(
-#     target_dir,
-#     recursive = TRUE,
-#     showWarnings = FALSE
-#   )
-#   
-#   copy_success <- file.copy(
-#     from = files,
-#     to = file.path(
-#       target_dir,
-#       basename(files)
-#     ),
-#     overwrite = TRUE
-#   )
-#   
-#   if (!all(copy_success)) {
-#     stop(
-#       paste0(
-#         "Could not copy all files to: ",
-#         target_dir
-#       )
-#     )
-#   }
-#   
-#   invisible(TRUE)
-# }
-# 
-# ##### PROCESS MODEL GROUPS ####
-# for (group_name in names(model_routing)) {
-#   
-#   group <- model_routing[[group_name]]
-#   
-#   input_files <- file.path(
-#     mplus_input_dir,
-#     paste0(
-#       group$files,
-#       ".inp"
-#     )
-#   )
-#   
-#   output_files <- file.path(
-#     mplus_input_dir,
-#     paste0(
-#       group$files,
-#       ".out"
-#     )
-#   )
-#   
-#   gh5_files <- file.path(
-#     mplus_input_dir,
-#     paste0(
-#       group$files,
-#       ".gh5"
-#     )
-#   )
-#   
-#   ##### CHECK REQUIRED FILES ####
-#   required_files <- c(
-#     input_files,
-#     output_files
-#   )
-#   
-#   missing_files <- required_files[
-#     !file.exists(required_files)
-#   ]
-#   
-#   if (length(missing_files) > 0) {
-#     
-#     print(
-#       missing_files
-#     )
-#     
-#     stop(
-#       paste0(
-#         "Required files are missing for group: ",
-#         group_name
-#       )
-#     )
-#   }
-#   
-#   ##### RETAIN EXISTING OPTIONAL GH5 FILES ####
-#   gh5_files <- gh5_files[
-#     file.exists(gh5_files)
-#   ]
-#   
-#   result_files <- c(
-#     output_files,
-#     gh5_files
-#   )
-#   
-#   all_model_files <- c(
-#     input_files,
-#     result_files
-#   )
-#   
-#   ##### COPY INPUTS TO GITHUB ####
-#   copy_files_checked(
-#     files = input_files,
-#     target_dir = group$github_dir
-#   )
-#   
-#   ##### COPY OUTPUTS TO SEAGATE RESULTS ####
-#   copy_files_checked(
-#     files = result_files,
-#     target_dir = group$results_dir
-#   )
-#   
-#   ##### CREATE DATED GROUP ARCHIVE ####
-#   group_archive_dir <- file.path(
-#     archive_root,
-#     paste0(
-#       archive_stamp,
-#       "_",
-#       group_name
-#     )
-#   )
-#   
-#   ##### COPY ALL MODEL FILES TO ARCHIVE ####
-#   copy_files_checked(
-#     files = all_model_files,
-#     target_dir = group_archive_dir
-#   )
-#   
-#   ##### REMOVE ARCHIVED FILES FROM WORKING DIRECTORY ####
-#   removal_success <- file.remove(
-#     all_model_files
-#   )
-#   
-#   if (!all(removal_success)) {
-#     stop(
-#       paste0(
-#         "Could not remove all archived files for group: ",
-#         group_name
-#       )
-#     )
-#   }
-# }
-# 
-# ##### SHOW REMAINING WORKING FILES ####
-# message(
-#   "\nSynchronization and archiving completed."
-# )
-# 
-# list.files(
-#   mplus_input_dir
-# )
-# 
-# ##### SHOW CREATED ARCHIVE DIRECTORIES ####
-# list.dirs(
-#   archive_root,
-#   recursive = FALSE,
-#   full.names = FALSE
-# )
-# #-------------------------------------------------------------------------
+#-------------------------------------------------------------------------
+##### M20 - M22: CLASS EFFECTS ON LATENT CHANGE (WITHOUT/WITH CONTROLVARS) #####
+#-------------------------------------------------------------------------
+
+##### LOAD FINAL MPLUS DATA INFORMATION #####
+
+outcome_mplus_data_file <- file.path(
+  mplus_input_dir,
+  "AMIS_mplus_dataset_m18_ses_mo.dat"
+)
+
+outcome_mplus_names_file <- file.path(
+  mplus_input_dir,
+  "AMIS_mplus_names_m18_ses_mo.rds"
+)
+
+assert_file_exists(
+  outcome_mplus_data_file,
+  "Final Mplus dataset"
+)
+
+assert_file_exists(
+  outcome_mplus_names_file,
+  "Final Mplus names file"
+)
+
+outcome_mplus_names <- readRDS(
+  outcome_mplus_names_file
+)
+
+outcome_mplus_fields <- count.fields(
+  outcome_mplus_data_file,
+  sep = "",
+  blank.lines.skip = TRUE
+)
+
+stopifnot(
+  is.character(outcome_mplus_names),
+  length(outcome_mplus_names) > 0L,
+  !anyNA(outcome_mplus_names),
+  all(nchar(outcome_mplus_names) <= 8L),
+  all(grepl(
+    "^[A-Za-z][A-Za-z0-9_]*$",
+    outcome_mplus_names
+  )),
+  anyDuplicated(toupper(outcome_mplus_names)) == 0L,
+  length(outcome_mplus_fields) > 0L,
+  all(
+    outcome_mplus_fields ==
+      length(outcome_mplus_names)
+  )
+)
+
+outcome_names_syntax <- paste(
+  wrap_mplus_names(
+    outcome_mplus_names,
+    max_width = 88
+  ),
+  collapse = "\n"
+)
+
+stopifnot(
+  all(
+    nchar(
+      strsplit(
+        outcome_names_syntax,
+        "\n",
+        fixed = TRUE
+      )[[1L]]
+    ) <= 88L
+  )
+)
+
+##### DEFINE COMMON OUTCOME-MODEL VARIABLES #####
+
+outcome_indicator_variables <- c(
+  "hyp_b2", "hyp_k2", "hyp_p2",
+  "hyp_b5", "hyp_k5", "hyp_p5",
+  "con_b2", "con_k2", "con_p2",
+  "con_b5", "con_k5", "con_p5",
+  "emo_b2", "emo_k2", "emo_p2",
+  "emo_b5", "emo_k5", "emo_p5"
+)
+
+outcome_class_variable <- "mo_cls"
+
+outcome_class_dummies <- c(
+  "c2",
+  "c3",
+  "c4"
+)
+
+required_outcome_variables <- c(
+  "SIC_N",
+  "stat_t5",
+  outcome_class_variable,
+  outcome_indicator_variables
+)
+
+missing_outcome_variables <- required_outcome_variables[
+  !toupper(required_outcome_variables) %in%
+    toupper(outcome_mplus_names)
+]
+
+if (length(missing_outcome_variables) > 0L) {
+  stop(
+    "The following variables are missing from the final Mplus dataset:\n",
+    paste(
+      missing_outcome_variables,
+      collapse = "\n"
+    )
+  )
+}
+
+if (
+  any(
+    toupper(outcome_class_dummies) %in%
+    toupper(outcome_mplus_names)
+  )
+) {
+  stop(
+    "The dummy names c2, c3, and c4 must not already occur ",
+    "in the Mplus NAMES list."
+  )
+}
+
+
+##### DEFINE COMMON CLASS SYNTAX #####
+
+outcome_class_define_syntax <- "
+  c2 = 0;
+  c3 = 0;
+  c4 = 0;
+
+  IF (mo_cls EQ 2) THEN c2 = 1;
+  IF (mo_cls EQ 3) THEN c3 = 1;
+  IF (mo_cls EQ 4) THEN c4 = 1;
+"
+
+outcome_class_effect_syntax <- "
+  ! Class effects on T2 baseline levels
+
+  EXT2 ON c2 (e2_c2);
+  EXT2 ON c3 (e2_c3);
+  EXT2 ON c4 (e2_c4);
+
+  EMO2 ON c2 (m2_c2);
+  EMO2 ON c3 (m2_c3);
+  EMO2 ON c4 (m2_c4);
+
+  ! Class effects on latent change
+
+  d_ext ON c2 (dx_c2);
+  d_ext ON c3 (dx_c3);
+  d_ext ON c4 (dx_c4);
+
+  d_emo ON c2 (dm_c2);
+  d_emo ON c3 (dm_c3);
+  d_emo ON c4 (dm_c4);
+"
+
+outcome_change_constraint_syntax <- "
+MODEL CONSTRAINT:
+
+  NEW(
+    ex2_c1 ex2_c2 ex2_c3 ex2_c4
+    ex5_c1 ex5_c2 ex5_c3 ex5_c4
+    em2_c1 em2_c2 em2_c3 em2_c4
+    em5_c1 em5_c2 em5_c3 em5_c4
+
+    dex_c1 dex_c2 dex_c3 dex_c4
+    dem_c1 dem_c2 dem_c3 dem_c4
+
+    dx_2v1 dx_3v1 dx_4v1
+    dx_3v2 dx_4v2 dx_4v3
+
+    dm_2v1 dm_3v1 dm_4v1
+    dm_3v2 dm_4v2 dm_4v3
+  );
+
+  ! Class-specific latent levels at T2
+
+  ex2_c1 = 0;
+  ex2_c2 = e2_c2;
+  ex2_c3 = e2_c3;
+  ex2_c4 = e2_c4;
+
+  em2_c1 = 0;
+  em2_c2 = m2_c2;
+  em2_c3 = m2_c3;
+  em2_c4 = m2_c4;
+
+  ! Class-specific latent levels at T5
+
+  ex5_c1 = m_dext;
+  ex5_c2 = e2_c2 + m_dext + dx_c2;
+  ex5_c3 = e2_c3 + m_dext + dx_c3;
+  ex5_c4 = e2_c4 + m_dext + dx_c4;
+
+  em5_c1 = m_demo;
+  em5_c2 = m2_c2 + m_demo + dm_c2;
+  em5_c3 = m2_c3 + m_demo + dm_c3;
+  em5_c4 = m2_c4 + m_demo + dm_c4;
+
+  ! Class-specific latent changes
+
+  dex_c1 = m_dext;
+  dex_c2 = m_dext + dx_c2;
+  dex_c3 = m_dext + dx_c3;
+  dex_c4 = m_dext + dx_c4;
+
+  dem_c1 = m_demo;
+  dem_c2 = m_demo + dm_c2;
+  dem_c3 = m_demo + dm_c3;
+  dem_c4 = m_demo + dm_c4;
+
+  ! Pairwise class contrasts: externalizing change
+
+  dx_2v1 = dx_c2;
+  dx_3v1 = dx_c3;
+  dx_4v1 = dx_c4;
+
+  dx_3v2 = dx_c3 - dx_c2;
+  dx_4v2 = dx_c4 - dx_c2;
+  dx_4v3 = dx_c4 - dx_c3;
+
+  ! Pairwise class contrasts: emotional-problems change
+
+  dm_2v1 = dm_c2;
+  dm_3v1 = dm_c3;
+  dm_4v1 = dm_c4;
+
+  dm_3v2 = dm_c3 - dm_c2;
+  dm_4v2 = dm_c4 - dm_c2;
+  dm_4v3 = dm_c4 - dm_c3;
+"
+
+
+##### DEFINE REUSABLE M20-M24 INPUT FUNCTION #####
+
+create_class_lcs_input <- function(
+    model_number,
+    model_name,
+    input_filename,
+    additional_predictors = character(),
+    center_predictors = character(),
+    covariates = "None",
+    model_role,
+    notes = ""
+) {
+  
+  stopifnot(
+    length(model_number) == 1L,
+     as.character(model_number) %in%
+      c(
+        as.character(20:24),
+        "23a",
+        "23b",
+        "25a",
+        "25b"
+      ),
+    length(model_name) == 1L,
+    nzchar(model_name),
+    length(input_filename) == 1L,
+    nzchar(input_filename),
+    length(covariates) == 1L,
+    length(model_role) == 1L
+  )
+  
+  additional_predictors <- unique(
+    additional_predictors
+  )
+  
+  center_predictors <- unique(
+    center_predictors
+  )
+  
+  predictors_not_in_model <- center_predictors[
+    !toupper(center_predictors) %in%
+      toupper(additional_predictors)
+  ]
+  
+  if (length(predictors_not_in_model) > 0L) {
+    stop(
+      "Variables requested for centering are not included ",
+      "as additional predictors:\n",
+      paste(
+        predictors_not_in_model,
+        collapse = "\n"
+      )
+    )
+  }
+  
+  missing_predictors <- additional_predictors[
+    !toupper(additional_predictors) %in%
+      toupper(outcome_mplus_names)
+  ]
+  
+  if (length(missing_predictors) > 0L) {
+    stop(
+      "Additional predictors are missing from the final Mplus dataset:\n",
+      paste(
+        missing_predictors,
+        collapse = "\n"
+      )
+    )
+  }
+  
+  usevariables <- c(
+    outcome_indicator_variables,
+    additional_predictors,
+    outcome_class_dummies
+  )
+  
+  usevariables_syntax <- paste(
+    wrap_mplus_names(
+      usevariables,
+      max_width = 88
+    ),
+    collapse = "\n"
+  )
+  
+  additional_predictor_syntax <- if (
+    length(additional_predictors) == 0L
+  ) {
+    
+    ""
+    
+  } else {
+    
+    paste0(
+      "\n\n",
+      "  ! Effects of additional predictors on baseline and change\n\n",
+      "  EXT2 EMO2 d_ext d_emo ON\n",
+      paste(
+        wrap_mplus_names(
+          additional_predictors,
+          max_width = 88,
+          indent = "    "
+        ),
+        collapse = "\n"
+      ),
+      ";"
+    )
+  }
+  
+  center_predictor_syntax <- if (
+    length(center_predictors) == 0L
+  ) {
+    
+    ""
+    
+  } else {
+    
+    paste0(
+      "\n  CENTER\n",
+      paste(
+        wrap_mplus_names(
+          center_predictors,
+          max_width = 88,
+          indent = "    "
+        ),
+        collapse = "\n"
+      ),
+      "\n    (GRANDMEAN);\n"
+    )
+  }
+  
+  model_id <- paste0(
+    "M",
+    model_number
+  )
+  
+  title_syntax <- paste0(
+    paste(
+      strwrap(
+        paste0(
+          model_id,
+          ": ",
+          model_name
+        ),
+        width = 84,
+        indent = 2,
+        exdent = 2
+      ),
+      collapse = "\n"
+    ),
+    ";"
+  )
+  
+  input_syntax <- paste0(
+    "TITLE:
+", title_syntax, "
+
+DATA:
+  FILE = ", basename(outcome_mplus_data_file), ";
+
+VARIABLE:
+  NAMES =
+", outcome_names_syntax, "
+    ;
+
+  USEVARIABLES =
+", usevariables_syntax, "
+    ;
+
+  USEOBSERVATIONS =
+    (stat_t5 NE 0) AND
+    (mo_cls GE 1) AND
+    (mo_cls LE 4);
+
+  IDVARIABLE = SIC_N;
+
+  MISSING = ALL (-999);
+
+DEFINE:
+", outcome_class_define_syntax,
+    center_predictor_syntax, "
+
+ANALYSIS:
+  ESTIMATOR = MLR;
+  COVERAGE = 0.01;
+
+MODEL:
+", sdq_standard_measurement_model, "
+
+  ! Classical two-wave latent change score model
+
+  ! Externalizing change
+
+  d_ext BY EXT5@1;
+
+  EXT5 ON EXT2@1;
+
+  EXT5@0;
+  [EXT5@0];
+
+  ! Emotional-problems change
+
+  d_emo BY EMO5@1;
+
+  EMO5 ON EMO2@1;
+
+  EMO5@0;
+  [EMO5@0];
+
+  ! Baseline latent means fixed for factor identification
+
+  [EXT2@0];
+  [EMO2@0];
+
+  ! Latent change intercepts:
+  ! expected change in the non-maltreated reference class
+
+  [d_ext] (m_dext);
+  [d_emo] (m_demo);
+
+  ! Baseline and latent-change residual variances
+
+  EXT2;
+  EMO2;
+
+  d_ext;
+  d_emo;
+
+  ! Covariance between baseline levels
+
+  EXT2 WITH EMO2;
+
+  ! Covariances between baseline levels and latent changes
+
+  EXT2 WITH d_ext;
+  EXT2 WITH d_emo;
+
+  EMO2 WITH d_ext;
+  EMO2 WITH d_emo;
+
+  ! Covariance between latent changes
+
+  d_ext WITH d_emo;
+
+", outcome_class_effect_syntax,
+    additional_predictor_syntax, "
+
+", outcome_change_constraint_syntax, "
+
+OUTPUT:
+  SAMPSTAT
+  STANDARDIZED
+  CINTERVAL
+  TECH1
+  TECH4;
+"
+  )
+  
+  write_mplus_input(
+    syntax = input_syntax,
+    filename = input_filename,
+    github_dir = github_m18_lcs_dir,
+    
+    documentation = list(
+      model_id = model_id,
+      
+      model_name = model_name,
+      
+      model_family =
+        "Conditional latent change score model",
+      
+      script =
+        "01_create_mplus_inputs_final.R",
+      
+      sample = paste(
+        "Participants with stat_t5 NE 0 and valid",
+        "four-group maltreatment classification in mo_cls"
+      ),
+      
+      estimator = "MLR",
+      
+      specification = paste(
+        "Classical two-wave bivariate latent change score model",
+        "for externalizing and emotional problems;",
+        "measurement model fixed to the final M7 partial scalar",
+        "invariance specification;",
+        "class 1 is the non-maltreated reference group;",
+        "classes predict T2 baseline levels and latent change"
+      ),
+      
+      residual_covariances = paste(
+        "Inherited unchanged from",
+        "sdq_standard_measurement_model"
+      ),
+      
+      covariates = covariates,
+      
+      model_role = model_role,
+      
+      notes = notes
+    )
+  )
+}
+
+
+##### DEFINE M20-M22 SETTINGS #####
+
+outcome_model_settings <- list(
+  
+  M20 = list(
+    model_number = 20L,
+    
+    model_name = paste(
+      "Four-group maltreatment classes predicting",
+      "latent psychopathology change"
+    ),
+    
+    input_filename =
+      "20_sdq_lcs_class_effects_mo.inp",
+    
+    additional_predictors =
+      character(),
+    
+    center_predictors =
+      character(),
+    
+    covariates =
+      "None",
+    
+    model_role = paste(
+      "Primary unadjusted model of maltreatment-class",
+      "differences in latent psychopathology change"
+    ),
+    
+    notes = paste(
+      "Class 1 is the non-maltreated reference group;",
+      "class effects on EXT2 and EMO2 allow baseline latent",
+      "levels to differ between classes;",
+      "primary parameters are the class effects on d_ext",
+      "and d_emo;",
+      "class-specific latent levels, latent changes, and",
+      "all pairwise change contrasts are defined in",
+      "MODEL CONSTRAINT"
+    )
+  ),
+  
+  M21 = list(
+    model_number = 21L,
+    
+    model_name = paste(
+      "Four-group maltreatment classes predicting",
+      "latent psychopathology change adjusted for",
+      "age and sex"
+    ),
+    
+    input_filename =
+      "21_sdq_lcs_class_effects_age_sex_mo.inp",
+    
+    additional_predictors = c(
+      "aget2",
+      "sext5"
+    ),
+    
+    center_predictors = c(
+      "aget2",
+      "sext5"
+    ),
+    
+    covariates = paste(
+      "Baseline age (aget2) and sex (sext5);",
+      "both covariates grand-mean centered"
+    ),
+    
+    model_role = paste(
+      "Model of maltreatment-class differences in latent",
+      "psychopathology change adjusted for age and sex"
+    ),
+    
+    notes = paste(
+      "Class 1 is the non-maltreated reference group;",
+      "age and sex predict both T2 baseline levels and",
+      "latent changes;",
+      "class-specific latent levels and changes refer to",
+      "the average covariate values in the analytical sample"
+    )
+  ),
+  
+  M22 = list(
+    model_number = 22L,
+    
+    model_name = paste(
+      "Four-group maltreatment classes predicting",
+      "latent psychopathology change adjusted for",
+      "age, sex, and maternal educational attainment"
+    ),
+    
+    input_filename =
+      "22_sdq_lcs_class_effects_sociodemographic_mo.inp",
+    
+    additional_predictors = c(
+      "aget2",
+      "sext5",
+      "sesausb"
+    ),
+    
+    center_predictors = c(
+      "aget2",
+      "sext5",
+      "sesausb"
+    ),
+    
+    covariates = paste(
+      "Baseline age (aget2), sex (sext5), and combined",
+      "maternal educational attainment (sesausb);",
+      "all covariates grand-mean centered"
+    ),
+    
+    model_role = paste(
+      "Fully sociodemographically adjusted model of",
+      "maltreatment-class differences in latent",
+      "psychopathology change"
+    ),
+    
+    notes = paste(
+      "Class 1 is the non-maltreated reference group;",
+      "combined maternal educational attainment uses",
+      "the source priority T2, DFG02, JA, and T5;",
+      "age, sex, and maternal educational attainment",
+      "predict both T2 baseline levels and latent changes;",
+      "class-specific latent levels and changes refer to",
+      "the average covariate values in the analytical sample"
+    )
+  )
+)
+
+
+##### CREATE M20-M22 INPUT #####
+
+outcome_model_files <- lapply(
+  outcome_model_settings,
+  function(settings) {
+    do.call(
+      create_class_lcs_input,
+      settings
+    )
+  }
+)
+
+outcome_input_files <- unname(
+  vapply(
+    outcome_model_files,
+    identity,
+    character(1)
+  )
+)
+
+input_file_m20 <- outcome_model_files$M20
+input_file_m21 <- outcome_model_files$M21
+input_file_m22 <- outcome_model_files$M22
+
+
+##### CHECK M20-M22 INPUTS #####
+
+missing_input_files <- outcome_input_files[
+  !file.exists(outcome_input_files)
+]
+
+if (length(missing_input_files) > 0L) {
+  stop(
+    "The following outcome-model input files are missing:\n",
+    paste(
+      missing_input_files,
+      collapse = "\n"
+    )
+  )
+}
+
+
+##### RUN M20-M22 #####
+
+if (isTRUE(run_mplus_models)) {
+  
+  if (
+    MplusAutomation::mplusAvailable(
+      silent = FALSE
+    ) != 0
+  ) {
+    stop(
+      "Mplus could not be detected by MplusAutomation."
+    )
+  }
+  
+  MplusAutomation::runModels(
+    target = outcome_input_files,
+    replaceOutfile = "always",
+    showOutput = FALSE,
+    logFile = FALSE,
+    quiet = FALSE
+  )
+  
+} else {
+  
+  message(
+    "M20-M21 inputs were created, but Mplus execution was skipped."
+  )
+}
+
+
+
+#-------------------------------------------------------------------------
+##### M23A-M23B: CLASS EFFECTS WITH POLYGENIC RISK SCORES #####
+#-------------------------------------------------------------------------
+
+##### DEFINE PRS MODEL SETTINGS #####
+
+outcome_prs_model_settings <- list(
+  
+  M23a = list(
+    model_number = "23a",
+    
+    model_name = paste(
+      "Four-group maltreatment classes predicting",
+      "latent psychopathology change adjusted for",
+      "age, sex, socioeconomic status, European-ancestry",
+      "MDD polygenic risk, and genetic principal components"
+    ),
+    
+    input_filename =
+      "23a_sdq_lcs_class_effects_prs_eau_mo.inp",
+    
+    additional_predictors = c(
+      "aget2",
+      "sext5",
+      "sesausb",
+      "prs_eau",
+      "PC1",
+      "PC2",
+      "PC3",
+      "PC4"
+    ),
+    
+    center_predictors = c(
+      "aget2",
+      "sext5",
+      "sesausb",
+      "prs_eau",
+      "PC1",
+      "PC2",
+      "PC3",
+      "PC4"
+    ),
+    
+    covariates = paste(
+      "Baseline age (aget2), sex (sext5),",
+      "socioeconomic status/maternal education (sesausb),",
+      "European-ancestry MDD polygenic risk score (prs_eau),",
+      "and the first four genetic principal components;",
+      "all predictors grand-mean centered"
+    ),
+    
+    model_role = paste(
+      "European-ancestry PRS-adjusted model of",
+      "maltreatment-class differences in latent",
+      "psychopathology change"
+    ),
+    
+    notes = paste(
+      "M23a extends the sociodemographically adjusted M22 model;",
+      "class 1 is the non-maltreated reference group;",
+      "age, sex, socioeconomic status, prs_eau, and PC1-PC4",
+      "predict both T2 baseline levels and latent changes;",
+      "the PRS is entered as an additive predictor and no",
+      "class-by-PRS interaction is estimated;",
+      "because all predictors are grand-mean centered,",
+      "class-specific latent levels and changes refer to",
+      "the average predictor values in the analytical sample;",
+      "class-specific latent levels, latent changes, and",
+      "all pairwise change contrasts are defined in",
+      "MODEL CONSTRAINT"
+    )
+  ),
+  
+  M23b = list(
+    model_number = "23b",
+    
+    model_name = paste(
+      "Four-group maltreatment classes predicting",
+      "latent psychopathology change adjusted for",
+      "age, sex, socioeconomic status, multi-ancestry",
+      "MDD polygenic risk, and genetic principal components"
+    ),
+    
+    input_filename =
+      "23b_sdq_lcs_class_effects_prs_mau_mo.inp",
+    
+    additional_predictors = c(
+      "aget2",
+      "sext5",
+      "sesausb",
+      "prs_mau",
+      "PC1",
+      "PC2",
+      "PC3",
+      "PC4"
+    ),
+    
+    center_predictors = c(
+      "aget2",
+      "sext5",
+      "sesausb",
+      "prs_mau",
+      "PC1",
+      "PC2",
+      "PC3",
+      "PC4"
+    ),
+    
+    covariates = paste(
+      "Baseline age (aget2), sex (sext5),",
+      "socioeconomic status/maternal education (sesausb),",
+      "multi-ancestry MDD polygenic risk score (prs_mau),",
+      "and the first four genetic principal components;",
+      "all predictors grand-mean centered"
+    ),
+    
+    model_role = paste(
+      "Multi-ancestry PRS-adjusted model of",
+      "maltreatment-class differences in latent",
+      "psychopathology change"
+    ),
+    
+    notes = paste(
+      "M23b extends the sociodemographically adjusted M22 model;",
+      "class 1 is the non-maltreated reference group;",
+      "age, sex, socioeconomic status, prs_mau, and PC1-PC4",
+      "predict both T2 baseline levels and latent changes;",
+      "the PRS is entered as an additive predictor and no",
+      "class-by-PRS interaction is estimated;",
+      "because all predictors are grand-mean centered,",
+      "class-specific latent levels and changes refer to",
+      "the average predictor values in the analytical sample;",
+      "class-specific latent levels, latent changes, and",
+      "all pairwise change contrasts are defined in",
+      "MODEL CONSTRAINT"
+    )
+  )
+)
+
+
+##### ADD M23A-M23B TO COMMON MODEL SETTINGS #####
+
+outcome_model_settings <- c(
+  outcome_model_settings,
+  outcome_prs_model_settings
+)
+
+
+##### CREATE M23A-M23B INPUTS #####
+
+outcome_prs_model_files <- lapply(
+  outcome_prs_model_settings,
+  function(settings) {
+    do.call(
+      create_class_lcs_input,
+      settings
+    )
+  }
+)
+
+outcome_prs_input_files <- unname(
+  vapply(
+    outcome_prs_model_files,
+    identity,
+    character(1)
+  )
+)
+
+input_file_m23a <-
+  outcome_prs_model_files$M23a
+
+input_file_m23b <-
+  outcome_prs_model_files$M23b
+
+
+##### CHECK M23A-M23B INPUTS #####
+
+missing_prs_input_files <- outcome_prs_input_files[
+  !file.exists(
+    outcome_prs_input_files
+  )
+]
+
+if (length(missing_prs_input_files) > 0L) {
+  stop(
+    "The following PRS-model input files are missing:\n",
+    paste(
+      missing_prs_input_files,
+      collapse = "\n"
+    )
+  )
+}
+
+
+##### RUN M23A-M23B #####
+
+if (isTRUE(run_mplus_models)) {
+  
+  if (
+    MplusAutomation::mplusAvailable(
+      silent = FALSE
+    ) != 0
+  ) {
+    stop(
+      "Mplus could not be detected by MplusAutomation."
+    )
+  }
+  
+  MplusAutomation::runModels(
+    target = outcome_prs_input_files,
+    replaceOutfile = "always",
+    showOutput = FALSE,
+    quiet = FALSE
+  )
+  
+} else {
+  
+  message(
+    paste(
+      "M23a-M23b inputs were created,",
+      "but Mplus execution was skipped."
+    )
+  )
+}
+
+#-------------------------------------------------------------------------
+##### M24: CLASS EFFECTS WITH HAIR CORTISOL #####
+#-------------------------------------------------------------------------
+
+##### DEFINE HAIR-CORTISOL MODEL SETTINGS #####
+
+outcome_cortisol_model_settings <- list(
+  
+  M24 = list(
+    model_number = 24L,
+    
+    model_name = paste(
+      "Four-group maltreatment classes predicting",
+      "latent psychopathology change adjusted for",
+      "age, sex, socioeconomic status, and",
+      "proximal-segment hair cortisol"
+    ),
+    
+    input_filename =
+      "24_sdq_lcs_class_effects_hair_cortisol_mo.inp",
+    
+    additional_predictors = c(
+      "aget2",
+      "sext5",
+      "sesausb",
+      "c2p1_z"
+    ),
+    
+    center_predictors = c(
+      "aget2",
+      "sext5",
+      "sesausb",
+      "c2p1_z"
+    ),
+    
+    covariates = paste(
+      "Baseline age (aget2), sex (sext5),",
+      "socioeconomic status/maternal education (sesausb),",
+      "and standardized proximal-segment hair cortisol",
+      "(c2p1_z); all predictors grand-mean centered"
+    ),
+    
+    model_role = paste(
+      "Hair-cortisol-adjusted model of",
+      "maltreatment-class differences in latent",
+      "psychopathology change"
+    ),
+    
+    notes = paste(
+      "M24 extends the sociodemographically adjusted M22 model;",
+      "class 1 is the non-maltreated reference group;",
+      "age, sex, socioeconomic status, and proximal-segment",
+      "hair cortisol predict both T2 baseline levels",
+      "and latent changes;",
+      "hair cortisol is entered as an additive predictor and",
+      "no class-by-cortisol interaction is estimated;",
+      "because all predictors are grand-mean centered,",
+      "class-specific latent levels and changes refer to",
+      "the average predictor values in the analytical sample;",
+      "class-specific latent levels, latent changes, and",
+      "all pairwise change contrasts are defined in",
+      "MODEL CONSTRAINT"
+    )
+  )
+)
+
+
+##### ADD M24 TO COMMON MODEL SETTINGS #####
+
+outcome_model_settings <- c(
+  outcome_model_settings,
+  outcome_cortisol_model_settings
+)
+
+
+##### CREATE M24 INPUT #####
+
+outcome_cortisol_model_files <- lapply(
+  outcome_cortisol_model_settings,
+  function(settings) {
+    do.call(
+      create_class_lcs_input,
+      settings
+    )
+  }
+)
+
+outcome_cortisol_input_files <- unname(
+  vapply(
+    outcome_cortisol_model_files,
+    identity,
+    character(1)
+  )
+)
+
+input_file_m24 <-
+  outcome_cortisol_model_files$M24
+
+
+##### CHECK M24 INPUT #####
+
+missing_cortisol_input_files <-
+  outcome_cortisol_input_files[
+    !file.exists(
+      outcome_cortisol_input_files
+    )
+  ]
+
+if (length(missing_cortisol_input_files) > 0L) {
+  stop(
+    "The following hair-cortisol input files are missing:\n",
+    paste(
+      missing_cortisol_input_files,
+      collapse = "\n"
+    )
+  )
+}
+
+
+##### RUN M24 #####
+
+if (isTRUE(run_mplus_models)) {
+  
+  if (
+    MplusAutomation::mplusAvailable(
+      silent = FALSE
+    ) != 0
+  ) {
+    stop(
+      "Mplus could not be detected by MplusAutomation."
+    )
+  }
+  
+  MplusAutomation::runModels(
+    target = outcome_cortisol_input_files,
+    replaceOutfile = "always",
+    showOutput = FALSE,
+    logFile = file.path(
+      mplus_input_dir,
+      "SDQ_class_effects_lcs_M24_run.log"
+    ),
+    quiet = FALSE
+  )
+  
+} else {
+  
+  message(
+    paste(
+      "M24 input was created,",
+      "but Mplus execution was skipped."
+    )
+  )
+}
+
+
+
+#-------------------------------------------------------------------------
+##### M25A-M25B: CLASS EFFECTS WITH BOTH BIOMARKERS #####
+#-------------------------------------------------------------------------
+
+##### DEFINE COMMON BIOMARKER VARIABLES #####
+
+outcome_combined_biomarker_covariates <- c(
+  "aget2",
+  "sext5",
+  "sesausb",
+  "c2p1_z"
+)
+
+outcome_genetic_principal_components <- c(
+  "PC1",
+  "PC2",
+  "PC3",
+  "PC4"
+)
+
+
+##### DEFINE COMBINED-BIOMARKER SETTINGS FUNCTION #####
+
+create_combined_biomarker_settings <- function(
+    model_number,
+    prs_variable,
+    prs_description,
+    input_filename
+) {
+  
+  additional_predictors <- c(
+    outcome_combined_biomarker_covariates,
+    prs_variable,
+    outcome_genetic_principal_components
+  )
+  
+  list(
+    model_number = model_number,
+    
+    model_name = paste(
+      "Four-group maltreatment classes predicting",
+      "latent psychopathology change adjusted for",
+      "age, sex, socioeconomic status,",
+      "proximal-segment hair cortisol,",
+      prs_description,
+      "and genetic principal components"
+    ),
+    
+    input_filename = input_filename,
+    
+    additional_predictors =
+      additional_predictors,
+    
+    center_predictors =
+      additional_predictors,
+    
+    covariates = paste(
+      "Baseline age (aget2), sex (sext5),",
+      "socioeconomic status/maternal education (sesausb),",
+      "standardized proximal-segment hair cortisol (c2p1_z),",
+      paste0(prs_description, " (", prs_variable, "),"),
+      "and the first four genetic principal components;",
+      "all predictors grand-mean centered"
+    ),
+    
+    model_role = paste(
+      "Combined hair-cortisol and",
+      prs_description,
+      "model of maltreatment-class differences",
+      "in latent psychopathology change"
+    ),
+    
+    notes = paste(
+      paste0("M", model_number),
+      "extends the sociodemographically adjusted M22 model;",
+      "class 1 is the non-maltreated reference group;",
+      "hair cortisol and polygenic risk are entered",
+      "simultaneously as additive predictors;",
+      "both biomarkers predict T2 baseline levels",
+      "and latent changes while mutually adjusted;",
+      "PC1-PC4 adjust the PRS effect for genetic ancestry;",
+      "no interactions between class, cortisol, or",
+      "polygenic risk are estimated;",
+      "because all predictors are grand-mean centered,",
+      "class-specific latent levels and changes refer to",
+      "the average predictor values in the analytical sample;",
+      "class-specific latent levels, latent changes, and",
+      "all pairwise change contrasts are defined in",
+      "MODEL CONSTRAINT"
+    )
+  )
+}
+
+
+##### DEFINE M25A-M25B SETTINGS #####
+
+outcome_combined_biomarker_model_settings <- list(
+  
+  M25a = create_combined_biomarker_settings(
+    model_number =
+      "25a",
+    
+    prs_variable =
+      "prs_eau",
+    
+    prs_description =
+      "European-ancestry MDD polygenic risk",
+    
+    input_filename =
+      "25a_sdq_lcs_class_effects_hcc_prs_eau_mo.inp"
+  ),
+  
+  M25b = create_combined_biomarker_settings(
+    model_number =
+      "25b",
+    
+    prs_variable =
+      "prs_mau",
+    
+    prs_description =
+      "multi-ancestry MDD polygenic risk",
+    
+    input_filename =
+      "25b_sdq_lcs_class_effects_hcc_prs_mau_mo.inp"
+  )
+)
+
+##### ADD M25A-M25B TO COMMON MODEL SETTINGS #####
+
+outcome_model_settings[
+  names(
+    outcome_combined_biomarker_model_settings
+  )
+] <- outcome_combined_biomarker_model_settings
+
+
+##### CREATE M25A-M25B INPUTS #####
+
+outcome_combined_biomarker_model_files <- lapply(
+  outcome_combined_biomarker_model_settings,
+  function(settings) {
+    do.call(
+      create_class_lcs_input,
+      settings
+    )
+  }
+)
+
+outcome_combined_biomarker_input_files <- unname(
+  vapply(
+    outcome_combined_biomarker_model_files,
+    identity,
+    character(1)
+  )
+)
+
+input_file_m25a <-
+  outcome_combined_biomarker_model_files$M25a
+
+input_file_m25b <-
+  outcome_combined_biomarker_model_files$M25b
+
+
+##### CHECK M25A-M25B INPUTS #####
+
+missing_combined_biomarker_input_files <-
+  outcome_combined_biomarker_input_files[
+    !file.exists(
+      outcome_combined_biomarker_input_files
+    )
+  ]
+
+if (
+  length(
+    missing_combined_biomarker_input_files
+  ) > 0L
+) {
+  stop(
+    "The following combined-biomarker input files are missing:\n",
+    paste(
+      missing_combined_biomarker_input_files,
+      collapse = "\n"
+    )
+  )
+}
+
+
+##### RUN M25A-M25B #####
+
+if (isTRUE(run_mplus_models)) {
+  
+  if (
+    MplusAutomation::mplusAvailable(
+      silent = FALSE
+    ) != 0
+  ) {
+    stop(
+      "Mplus could not be detected by MplusAutomation."
+    )
+  }
+  
+  MplusAutomation::runModels(
+    target =
+      outcome_combined_biomarker_input_files,
+    
+    replaceOutfile =
+      "always",
+    
+    showOutput =
+      FALSE,
+    
+    quiet =
+      FALSE
+  )
+  
+} else {
+  
+  message(
+    paste(
+      "M25a-M25b inputs were created,",
+      "but Mplus execution was skipped."
+    )
+  )
+}

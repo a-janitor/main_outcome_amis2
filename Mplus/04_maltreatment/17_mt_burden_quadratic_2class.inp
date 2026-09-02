@@ -63,8 +63,9 @@ VARIABLE:
 ANALYSIS:
   TYPE = MIXTURE;
   ESTIMATOR = MLR;
-  STARTS = 0;
-  OPTSEED = 691234;
+  STARTS = 1000 250;
+  STITERATIONS = 20;
+  LRTSTARTS = 0 0 1000 250;
   PROCESSORS = 4;
 
 MODEL:
@@ -102,10 +103,12 @@ MODEL:
   [bur_s] (bs2);
   [bur_q] (bq2);
 
-
 OUTPUT:
   TECH1;
+  TECH3;
   TECH8;
+  TECH11;
+  TECH14;
 
 SAVEDATA:
   FILE = 17_mt_burden_quadratic_2class_cprob.dat;

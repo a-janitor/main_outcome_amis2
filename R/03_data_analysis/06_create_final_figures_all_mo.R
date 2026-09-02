@@ -6,11 +6,17 @@ source(
   "C:/Users/keil/Documents/main_outcome_amis2/R/03_data_analysis/00_setup_standardized.R"
 )
 
+source(
+  "C:/Users/keil/Documents/main_outcome_amis2/R/03_data_analysis/00_helper_functions.R"
+)
+
+
 required_packages <- c(
   "MplusAutomation",
   "dplyr",
   "tibble",
-  "ggplot2"
+  "ggplot2",
+  "ggtext"
 )
 
 missing_packages <- required_packages[
@@ -294,6 +300,21 @@ if (!file.exists(m18_output_file)) {
   )
 }
 
+m18_output_lines <- readLines(
+  m18_output_file,
+  warn = FALSE
+)
+
+m18_growth_parameter_indices <-
+  extract_growth_mean_parameter_indices(
+    m18_output_lines
+  )
+
+m18_tech3_covariance_matrix <-
+  extract_tech3_covariance_matrix(
+    m18_output_lines
+  )
+
 m18_model <- MplusAutomation::readModels(
   m18_output_file,
   quiet = TRUE
@@ -401,6 +422,44 @@ if (
   )
 }
 
+m18_growth_mean_se_check <- m18_growth_mean_rows |>
+  dplyr::transmute(
+    .mplus_class,
+    .parameter,
+    reported_se = as.numeric(se)
+  ) |>
+  dplyr::left_join(
+    m18_growth_parameter_indices,
+    by = c(
+      ".mplus_class",
+      ".parameter"
+    )
+  ) |>
+  dplyr::mutate(
+    tech3_se = sqrt(
+      diag(
+        m18_tech3_covariance_matrix
+      )[tech3_index]
+    )
+  )
+
+if (
+  any(!is.finite(m18_growth_mean_se_check$tech3_se)) ||
+  any(
+    abs(
+      m18_growth_mean_se_check$reported_se -
+      m18_growth_mean_se_check$tech3_se
+    ) > 0.002
+  )
+) {
+  stop(
+    paste(
+      "The TECH1-to-TECH3 parameter mapping failed its standard-error check.",
+      "The M18 output structure may have changed."
+    )
+  )
+}
+
 m18_growth_means <- m18_growth_mean_rows |>
   dplyr::group_by(
     .mplus_class
@@ -428,11 +487,7 @@ m18_growth_means <- m18_growth_mean_rows |>
 ##### DEFINE CLASS LABELS AND SIZES ####
 
 m18_class_lookup <- tibble::tibble(
-  .mplus_class = c(
-    2L,
-    1L,
-    3L
-  ),
+  .mplus_class = 1:3,
   
   class_name = c(
     "Moderate/early-increasing burden",
@@ -546,78 +601,23 @@ if (
     !is.finite(
       developmental_period_data$time_score
     )
+  ) ||
+  any(
+    developmental_period_data$number_of_values != 1L
   )
 ) {
   stop(
-    "At least one developmental time score is missing."
+    paste(
+      "At least one developmental time score is missing",
+      "or was not identified uniquely."
+    )
   )
 }
 
 
-##### EXTRACT MODEL-ESTIMATED TRAJECTORY AND 95% CIs ####
+##### CALCULATE MODEL-IMPLIED TRAJECTORIES AND 95% CIs ####
 
 trajectory_grid_points_m18 <- 81L
-
-m18_trajectory_rows <- m18_parameters |>
-  dplyr::filter(
-    grepl(
-      "^C[123]P[0-9]{3}$",
-      .parameter
-    )
-  ) |>
-  dplyr::transmute(
-    .mplus_class = as.integer(
-      substr(
-        .parameter,
-        2,
-        2
-      )
-    ),
-    
-    grid_position = as.integer(
-      substr(
-        .parameter,
-        4,
-        6
-      )
-    ),
-    
-    estimate = as.numeric(
-      est
-    ),
-    
-    se = as.numeric(
-      se
-    ),
-    
-    ci_lower = estimate -
-      1.96 * se,
-    
-    ci_upper = estimate +
-      1.96 * se
-  )
-
-expected_trajectory_rows <-
-  3L * trajectory_grid_points_m18
-
-if (
-  nrow(m18_trajectory_rows) !=
-  expected_trajectory_rows ||
-  any(
-    table(
-      m18_trajectory_rows$.mplus_class
-    ) != trajectory_grid_points_m18
-  )
-) {
-  stop(
-    paste0(
-      "The expected ",
-      expected_trajectory_rows,
-      " M18 trajectory parameters were not found. ",
-      "Add the MODEL CONSTRAINT block to M18 and rerun it."
-    )
-  )
-}
 
 minimum_time_score <- min(
   developmental_period_data$time_score
@@ -627,19 +627,125 @@ maximum_time_score <- max(
   developmental_period_data$time_score
 )
 
-m18_trajectory_data <- m18_trajectory_rows |>
-  dplyr::mutate(
-    time_score = minimum_time_score +
-      (
-        grid_position - 1
-      ) /
-      (
-        trajectory_grid_points_m18 - 1
-      ) *
-      (
-        maximum_time_score -
-          minimum_time_score
+calculate_m18_trajectory_values <- function(
+    time_scores
+) {
+  trajectory_parts <- lapply(
+    m18_growth_means$.mplus_class,
+    function(class_number) {
+      class_growth_means <- m18_growth_means |>
+        dplyr::filter(
+          .mplus_class == class_number
+        )
+      
+      class_parameter_indices <-
+        m18_growth_parameter_indices |>
+        dplyr::filter(
+          .mplus_class == class_number
+        ) |>
+        dplyr::mutate(
+          parameter_order = match(
+            .parameter,
+            c(
+              "BUR_I",
+              "BUR_S",
+              "BUR_Q"
+            )
+          )
+        ) |>
+        dplyr::arrange(
+          parameter_order
+        )
+      
+      if (
+        nrow(class_growth_means) != 1L ||
+        nrow(class_parameter_indices) != 3L ||
+        any(!is.finite(class_parameter_indices$parameter_order))
+      ) {
+        stop(
+          "Growth means or TECH3 indices are incomplete for class ",
+          class_number,
+          "."
+        )
+      }
+      
+      beta <- c(
+        class_growth_means$bur_i,
+        class_growth_means$bur_s,
+        class_growth_means$bur_q
       )
+      
+      design_matrix <- cbind(
+        1,
+        time_scores,
+        time_scores^2
+      )
+      
+      class_covariance_matrix <-
+        m18_tech3_covariance_matrix[
+          class_parameter_indices$tech3_index,
+          class_parameter_indices$tech3_index,
+          drop = FALSE
+        ]
+      
+      trajectory_variance <- rowSums(
+        (
+          design_matrix %*%
+            class_covariance_matrix
+        ) * design_matrix
+      )
+      
+      if (any(trajectory_variance < -1e-10)) {
+        stop(
+          "A negative Delta-method trajectory variance was obtained for class ",
+          class_number,
+          "."
+        )
+      }
+      
+      trajectory_variance <- pmax(
+        trajectory_variance,
+        0
+      )
+      
+      trajectory_se <- sqrt(
+        trajectory_variance
+      )
+      
+      trajectory_estimate <- as.vector(
+        design_matrix %*% beta
+      )
+      
+      tibble::tibble(
+        .mplus_class = class_number,
+        time_score = time_scores,
+        estimate = trajectory_estimate,
+        se = trajectory_se,
+        ci_lower = trajectory_estimate -
+          stats::qnorm(0.975) * trajectory_se,
+        ci_upper = trajectory_estimate +
+          stats::qnorm(0.975) * trajectory_se
+      )
+    }
+  )
+  
+  dplyr::bind_rows(
+    trajectory_parts
+  )
+}
+
+
+m18_trajectory_grid <- tibble::tibble(
+  time_score = seq(
+    from = minimum_time_score,
+    to = maximum_time_score,
+    length.out = trajectory_grid_points_m18
+  )
+)
+
+m18_trajectory_data <-
+  calculate_m18_trajectory_values(
+    m18_trajectory_grid$time_score
   ) |>
   dplyr::left_join(
     m18_class_lookup,
@@ -657,19 +763,30 @@ m18_trajectory_data <- m18_trajectory_rows |>
     time_score
   )
 
+if (
+  nrow(m18_trajectory_data) !=
+  3L * trajectory_grid_points_m18 ||
+  any(
+    table(
+      m18_trajectory_data$.mplus_class
+    ) != trajectory_grid_points_m18
+  )
+) {
+  stop(
+    "The M18 trajectory grid could not be constructed correctly."
+  )
+}
+
 
 ##### CALCULATE ESTIMATES AT THE SEVEN PERIOD MIDPOINTS ####
 
-m18_period_estimates <- merge(
-  m18_growth_means,
-  developmental_period_data,
-  by = NULL
-) |>
-  tibble::as_tibble() |>
-  dplyr::mutate(
-    estimate = bur_i +
-      bur_s * time_score +
-      bur_q * time_score^2
+m18_period_estimates <-
+  calculate_m18_trajectory_values(
+    developmental_period_data$time_score
+  ) |>
+  dplyr::left_join(
+    developmental_period_data,
+    by = "time_score"
   ) |>
   dplyr::left_join(
     m18_class_lookup,
@@ -695,7 +812,10 @@ m18_period_estimates |>
     class_name,
     period,
     time_score,
-    estimate
+    estimate,
+    se,
+    ci_lower,
+    ci_upper
   ) |>
   print(
     n = Inf
@@ -714,10 +834,9 @@ m18_class_colors <- stats::setNames(
 )
 
 m18_class_linetypes <- stats::setNames(
-  c(
+  rep(
     "solid",
-    "longdash",
-    "dotdash"
+    nrow(m18_class_lookup)
   ),
   m18_class_lookup$class_label
 )
@@ -748,12 +867,11 @@ m18_figure_note <- stringr::str_wrap(
     "indicators of subtype count, frequency, and severity.",
     "Negative values indicate burden below the mean of the reference",
     "sample used for standardization and do not represent negative",
-    "maltreatment exposure."
+    "maltreatment exposure. Shaded areas represent pointwise 95%",
+    "confidence intervals for the estimated class-specific mean trajectories."
   ),
-  width = 125
+  width = 135
 )
-
-
 
 ##### DEFINE DEVELOPMENTAL PERIOD LABELS ####
 
@@ -775,6 +893,14 @@ stopifnot(
     m18_class_order,
     names(m18_class_colors)
   ),
+  identical(
+    m18_class_order,
+    names(m18_class_linetypes)
+  ),
+  sum(m18_class_lookup$class_n) == 303L,
+  abs(
+    sum(m18_class_lookup$class_percent) - 100
+  ) < 0.1,
   all(
     m18_class_order %in%
       unique(
@@ -797,6 +923,7 @@ m18_figure <- ggplot2::ggplot(
     y = estimate,
     color = class_label,
     fill = class_label,
+    linetype = class_label,
     group = class_label
   )
 ) +
@@ -811,13 +938,13 @@ m18_figure <- ggplot2::ggplot(
       ymin = ci_lower,
       ymax = ci_upper
     ),
-    alpha = 0.16,
+    alpha = 0.14,
     color = NA,
+    linetype = 0,
     show.legend = FALSE
   ) +
   ggplot2::geom_line(
     linewidth = 1.15,
-    linetype = "solid",
     show.legend = TRUE
   ) +
   ggplot2::geom_point(
@@ -846,18 +973,18 @@ m18_figure <- ggplot2::ggplot(
     )
   ) +
   ggplot2::scale_y_continuous(
-    breaks = c(
-      -1,
-      0,
-      2,
-      4,
-      6,
-      8,
-      10
+    limits = c(
+      -2,
+      NA
+    ),
+    breaks = seq(
+      -2,
+      10,
+      by = 2
     ),
     expand = ggplot2::expansion(
       mult = c(
-        0.03,
+        0,
         0.06
       )
     )
@@ -875,6 +1002,17 @@ m18_figure <- ggplot2::ggplot(
   ggplot2::scale_fill_manual(
     values = m18_class_colors,
     breaks = m18_class_order,
+    drop = FALSE,
+    guide = "none"
+  ) +
+  ggplot2::scale_linetype_manual(
+    values = m18_class_linetypes,
+    breaks = m18_class_order,
+    labels = unname(
+      m18_class_legend_labels[
+        m18_class_order
+      ]
+    ),
     drop = FALSE
   ) +
   ggplot2::labs(
@@ -882,6 +1020,7 @@ m18_figure <- ggplot2::ggplot(
     y = "ESTIMATED MALTREATMENT BURDEN",
     color = NULL,
     fill = NULL,
+    linetype = NULL,
     caption = m18_figure_note
   ) +
   ggplot2::guides(
@@ -889,7 +1028,12 @@ m18_figure <- ggplot2::ggplot(
     color = ggplot2::guide_legend(
       override.aes = list(
         linewidth = 1.15,
-        linetype = "solid",
+        alpha = 1
+      )
+    ),
+    linetype = ggplot2::guide_legend(
+      override.aes = list(
+        linewidth = 1.15,
         alpha = 1
       )
     )
@@ -961,7 +1105,12 @@ m18_figure <- ggplot2::ggplot(
 
 ##### DISPLAY FIGURE ####
 
-m18_figure
+if (interactive()) {
+  print(
+    m18_figure
+  )
+}
+
 
 ##### SAVE FIGURE ####
 
@@ -991,18 +1140,640 @@ ggplot2::ggsave(
   bg = "white"
 )
 
-if (interactive()) {
-  print(
-    m18_figure
-  )
-}
-
 message(
   "Saved Figure ",
   figure_number,
   ": ",
   figure_output_file
 )
+
+#-------------------------------------------------------------------------
+##### FIGURE 1: M20 CLASS-SPECIFIC PSYCHOPATHOLOGY TRAJECTORIES #####
+#-------------------------------------------------------------------------
+
+##### READ M20 OUTPUT #####
+
+m20_output_file <- file.path(
+  mplus_input_dir,
+  "20_sdq_lcs_class_effects_mo.out"
+)
+
+if (!file.exists(m20_output_file)) {
+  stop(
+    "The M20 output file is missing:\n",
+    m20_output_file
+  )
+}
+
+m20_model <- MplusAutomation::readModels(
+  m20_output_file,
+  quiet = TRUE
+)
+
+if (
+  length(m20_model$errors) > 0L
+) {
+  stop(
+    "Mplus errors were found in M20:\n",
+    paste(
+      unlist(m20_model$errors),
+      collapse = "\n"
+    )
+  )
+}
+
+m20_parameters <- tibble::as_tibble(
+  m20_model$parameters$unstandardized
+) |>
+  dplyr::mutate(
+    header_clean = toupper(
+      gsub(
+        "[^A-Za-z0-9]+",
+        "",
+        trimws(
+          as.character(.data$paramHeader)
+        )
+      )
+    ),
+    parameter_clean = toupper(
+      gsub(
+        "[^A-Za-z0-9]+",
+        "",
+        trimws(
+          as.character(.data$param)
+        )
+      )
+    )
+  )
+
+
+##### DEFINE PARAMETER EXTRACTION #####
+
+extract_m20_parameter <- function(
+    header,
+    parameter
+) {
+  
+  target_header <- toupper(
+    gsub(
+      "[^A-Za-z0-9]+",
+      "",
+      header
+    )
+  )
+  
+  target_parameter <- toupper(
+    gsub(
+      "[^A-Za-z0-9]+",
+      "",
+      parameter
+    )
+  )
+  
+  parameter_row <- m20_parameters |>
+    dplyr::filter(
+      .data$header_clean == .env$target_header,
+      .data$parameter_clean == .env$target_parameter
+    )
+  
+  if (nrow(parameter_row) != 1L) {
+    stop(
+      "Expected exactly one M20 parameter for ",
+      header,
+      " / ",
+      parameter,
+      "; found ",
+      nrow(parameter_row),
+      "."
+    )
+  }
+  
+  as.numeric(
+    parameter_row$est[[1L]]
+  )
+}
+
+
+extract_m20_new_parameter <- function(
+    parameter
+) {
+  
+  target_parameter <- toupper(
+    gsub(
+      "[^A-Za-z0-9]+",
+      "",
+      parameter
+    )
+  )
+  
+  parameter_row <- m20_parameters |>
+    dplyr::filter(
+      grepl(
+        "NEW|ADDITIONAL",
+        .data$header_clean
+      ),
+      .data$parameter_clean ==
+        .env$target_parameter
+    )
+  
+  if (nrow(parameter_row) != 1L) {
+    stop(
+      "Expected exactly one M20 MODEL CONSTRAINT parameter for ",
+      parameter,
+      "; found ",
+      nrow(parameter_row),
+      "."
+    )
+  }
+  
+  estimate <- as.numeric(
+    parameter_row$est[[1L]]
+  )
+  
+  standard_error <- as.numeric(
+    parameter_row$se[[1L]]
+  )
+  
+  tibble::tibble(
+    Estimate = estimate,
+    SE = standard_error,
+    CI_lower = estimate -
+      stats::qnorm(0.975) * standard_error,
+    CI_upper = estimate +
+      stats::qnorm(0.975) * standard_error
+  )
+}
+
+
+##### DEFINE CLASSES #####
+
+m20_class_lookup <- tibble::tibble(
+  Class_number = 1:4,
+  
+  Class = c(
+    "Non-maltreated",
+    "Moderate/early-increasing burden",
+    "Elevated/declining burden",
+    "High/rebound burden"
+  ),
+  
+  Class_n = c(
+    281L,
+    223L,
+    42L,
+    38L
+  )
+)
+
+m20_class_colours <- stats::setNames(
+  c(
+    "#333333",
+    "#0072B2",
+    "#009E73",
+    "#D55E00"
+  ),
+  m20_class_lookup$Class
+)
+
+m20_class_linetypes <- stats::setNames(
+  c(
+    "solid",
+    "solid",
+    "solid",
+    "solid"
+  ),
+  m20_class_lookup$Class
+)
+
+m20_class_shapes <- stats::setNames(
+  c(
+    16,
+    17,
+    15,
+    18
+  ),
+  m20_class_lookup$Class
+)
+
+
+##### EXTRACT CLASS-SPECIFIC LATENT SCORES #####
+
+m20_trajectory_key <- tidyr::crossing(
+  Outcome = c(
+    "Externalizing problems",
+    "Emotional problems"
+  ),
+  Class_number = 1:4,
+  Assessment = c(
+    "T2",
+    "T5"
+  )
+) |>
+  dplyr::left_join(
+    m20_class_lookup,
+    by = "Class_number"
+  ) |>
+  dplyr::mutate(
+    Parameter = dplyr::case_when(
+      .data$Outcome ==
+        "Externalizing problems" &
+        .data$Assessment == "T2" ~
+        paste0(
+          "EX2_C",
+          .data$Class_number
+        ),
+      
+      .data$Outcome ==
+        "Externalizing problems" &
+        .data$Assessment == "T5" ~
+        paste0(
+          "EX5_C",
+          .data$Class_number
+        ),
+      
+      .data$Outcome ==
+        "Emotional problems" &
+        .data$Assessment == "T2" ~
+        paste0(
+          "EM2_C",
+          .data$Class_number
+        ),
+      
+      .data$Outcome ==
+        "Emotional problems" &
+        .data$Assessment == "T5" ~
+        paste0(
+          "EM5_C",
+          .data$Class_number
+        )
+    )
+  )
+
+
+##### PREPARE FIGURE DATA #####
+
+m20_trajectory_data <- purrr::pmap_dfr(
+  m20_trajectory_key,
+  
+  function(
+    Outcome,
+    Class_number,
+    Assessment,
+    Class,
+    Class_n,
+    Parameter
+  ) {
+    
+    parameter_result <-
+      extract_m20_new_parameter(
+        Parameter
+      )
+    
+    tibble::tibble(
+      Outcome = Outcome,
+      Class_number = Class_number,
+      Class = Class,
+      Class_n = Class_n,
+      Assessment = Assessment,
+      Parameter = Parameter,
+      Estimate = parameter_result$Estimate,
+      SE = parameter_result$SE,
+      CI_lower = parameter_result$CI_lower,
+      CI_upper = parameter_result$CI_upper
+    )
+  }
+) |>
+  dplyr::mutate(
+    Assessment = factor(
+      .data$Assessment,
+      levels = c(
+        "T2",
+        "T5"
+      )
+    ),
+    
+    Assessment_numeric = dplyr::if_else(
+      as.character(.data$Assessment) == "T2",
+      1,
+      2
+    ),
+    
+    Class = factor(
+      .data$Class,
+      levels = m20_class_lookup$Class
+    ),
+    
+    Outcome = factor(
+      .data$Outcome,
+      levels = c(
+        "Externalizing problems",
+        "Emotional problems"
+      )
+    )
+  ) |>
+  dplyr::arrange(
+    .data$Outcome,
+    .data$Class_number,
+    .data$Assessment
+  )
+
+m20_trajectory_labels <- m20_trajectory_data |>
+  dplyr::filter(
+    .data$Assessment == "T5"
+  ) |>
+  dplyr::mutate(
+    label = dplyr::case_when(
+      as.character(.data$Class) ==
+        "Moderate/early-increasing burden" ~
+        "Moderate/early-\nincreasing burden",
+      
+      as.character(.data$Class) ==
+        "Elevated/declining burden" ~
+        "Elevated/declining\nburden",
+      
+      as.character(.data$Class) ==
+        "High/rebound burden" ~
+        "High/rebound\nburden",
+      
+      TRUE ~
+        as.character(.data$Class)
+    )
+  )
+
+m20_y_min <- floor(
+  min(
+    m20_trajectory_data$CI_lower,
+    na.rm = TRUE
+  ) * 2
+) / 2
+
+m20_y_max <- ceiling(
+  max(
+    m20_trajectory_data$CI_upper,
+    na.rm = TRUE
+  ) * 2
+) / 2
+
+##### CREATE FIGURE NOTE ######
+
+m20_figure_note_text <- paste(
+  "Note.",
+  "Shaded areas connect the pointwise 95% confidence intervals",
+  "at T2 and T5 based on delta-method standard errors.",
+  "The shading between assessments is shown for visual presentation",
+  "and does not represent a continuously estimated trajectory.",
+  "Follow-up latent scores were calculated as the sum of the",
+  "estimated T2 latent level and latent change.",
+  "The T2 latent means of the non-maltreated reference group",
+  "were fixed to zero for model identification."
+)
+
+m20_figure_note <- paste(
+  strwrap(
+    m20_figure_note_text,
+    width = 200
+  ),
+  collapse = "\n"
+)
+
+
+##### CREATE FIGURE #####
+
+figure_1_m20 <- ggplot2::ggplot(
+  m20_trajectory_data,
+  ggplot2::aes(
+    x = .data$Assessment_numeric,
+    y = .data$Estimate,
+    group = .data$Class,
+    colour = .data$Class
+  )
+) +
+  ggplot2::geom_segment(
+    x = 1,
+    xend = 2.05,
+    y = 0,
+    yend = 0,
+    inherit.aes = FALSE,
+    linetype = "dotted",
+    linewidth = 0.50,
+    colour = "grey60"
+  ) +
+  ggplot2::geom_ribbon(
+    ggplot2::aes(
+      ymin = .data$CI_lower,
+      ymax = .data$CI_upper,
+      fill = .data$Class
+    ),
+    alpha = 0.12,
+    colour = NA,
+    show.legend = FALSE
+  ) +
+  ggplot2::geom_line(
+    linewidth = 1.50,
+    linetype = "solid",
+    lineend = "round"
+  ) +
+  ggplot2::geom_point(
+    shape = 16,
+    size = 3.8
+  ) +
+  ggrepel::geom_label_repel(
+    data = m20_trajectory_labels,
+    ggplot2::aes(
+      label = .data$label
+    ),
+    direction = "y",
+    hjust = 0,
+    nudge_x = 0.18,
+    size = 3.1,
+    fontface = "bold",
+    family = "Arial",
+    fill = "white",
+    label.size = NA,
+    label.padding = grid::unit(
+      0.10,
+      "lines"
+    ),
+    segment.colour = "grey55",
+    segment.size = 0.35,
+    box.padding = 0.25,
+    point.padding = 0.15,
+    min.segment.length = 0,
+    show.legend = FALSE
+  ) +
+  ggplot2::facet_wrap(
+    ggplot2::vars(
+      Outcome
+    ),
+    nrow = 1,
+    scales = "fixed",
+    labeller = ggplot2::labeller(
+      Outcome = c(
+        "Externalizing problems" =
+          "EXTERNALIZING PROBLEMS",
+        "Emotional problems" =
+          "EMOTIONAL PROBLEMS"
+      )
+    )
+  ) +
+  ggplot2::scale_colour_manual(
+    values = m20_class_colours
+  ) +
+  ggplot2::scale_fill_manual(
+    values = m20_class_colours
+  ) +
+  ggplot2::scale_x_continuous(
+    breaks = c(
+      1,
+      2
+    ),
+    labels = c(
+      "BASELINE (T2)",
+      "FOLLOW-UP (T5)"
+    ),
+    expand = ggplot2::expansion(
+      add = c(
+        0.10,
+        0.78
+      )
+    )
+  ) +
+  ggplot2::scale_y_continuous(
+    limits = c(
+      m20_y_min,
+      m20_y_max
+    ),
+    breaks = seq(
+      m20_y_min,
+      m20_y_max,
+      by = 1
+    ),
+    expand = ggplot2::expansion(
+      mult = c(
+        0.04,
+        0.06
+      )
+    )
+  ) +
+  ggplot2::coord_cartesian(
+    clip = "off"
+  ) +
+  ggplot2::labs(
+    x = "ASSESSMENT",
+    y = "UNADJUSTED LATENT SCORE",
+    caption = m20_figure_note
+  ) +
+  ggplot2::theme_classic(
+    base_size = 11,
+    base_family = "Arial"
+  ) +
+  ggplot2::theme(
+    legend.position = "none",
+    
+    strip.background =
+      ggplot2::element_blank(),
+    
+    strip.text =
+      ggplot2::element_text(
+        face = "bold",
+        size = 11
+      ),
+    
+    plot.caption.position = "panel",
+    
+    plot.caption = ggplot2::element_text(
+      hjust = 0,
+      size = 9,
+      face = "plain",
+      lineheight = 1.1,
+      margin = ggplot2::margin(
+        t = 10
+      )
+    ),
+    axis.text =
+      ggplot2::element_text(
+        colour = "black"
+      ),
+    
+    axis.text.x =
+      ggplot2::element_text(
+        face = "bold"
+      ),
+    
+    axis.title =
+      ggplot2::element_text(
+        face = "bold"
+      ),
+    
+    axis.title.x =
+      ggplot2::element_text(
+        margin = ggplot2::margin(
+          t = 8
+        )
+      ),
+    
+    axis.title.y =
+      ggplot2::element_text(
+        margin = ggplot2::margin(
+          r = 8
+        )
+      ),
+    
+    panel.spacing = grid::unit(
+      2.2,
+      "cm"
+    ),
+    
+    plot.margin = ggplot2::margin(
+      t = 10,
+      r = 125,
+      b = 8,
+      l = 8
+    )
+  )
+
+
+##### DISPLAY FIGURE #####
+
+if (interactive()) {
+  print(
+    figure_1_m20
+  )
+}
+
+
+##### SAVE FIGURE #####
+
+dir.create(
+  man_figure_dir,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+figure_1_m20_file <- file.path(
+  man_figure_dir,
+  "Figure_1_M20_class_specific_trajectories.tiff"
+)
+
+ggplot2::ggsave(
+  filename = figure_1_m20_file,
+  plot = figure_1_m20,
+  width = m20_figure_width,
+  height = 5.8,
+  units = "in",
+  dpi = 600,
+  compression = "lzw",
+  bg = "white"
+)
+
+message(
+  "Saved M20 class-specific trajectory figure:\n",
+  figure_1_m20_file
+)
+
+#-----------------------------------------------------------------------
+#-------------------------- UPDATED UNTIL HERE -------------------------
+#-----------------------------------------------------------------------
 
 #-----------------------------------------------------------------------
 ##### READ PARAMETERS #####
@@ -1171,8 +1942,7 @@ figure_1 <- ggplot2::ggplot(
       .data$Class
     ),
     colour = .data$Class,
-    linetype = .data$Class,
-    shape = .data$Class
+    linetype = .data$Class
   )
 ) +
   ggplot2::geom_line(
@@ -1180,8 +1950,8 @@ figure_1 <- ggplot2::ggplot(
     lineend = "round"
   ) +
   ggplot2::geom_point(
-    size = 4.0,
-    stroke = 0.90
+    size = 16,
+    stroke = 3.80
   ) +
   ggrepel::geom_text_repel(
     data = trajectory_labels,

@@ -445,7 +445,7 @@ format_apa_table <- function(
       border = apa_rule
     ) |>
     flextable::hline_bottom(
-      i = nrow(data),
+      # i = nrow(data),
       part = "body",
       border = apa_rule
     )
@@ -612,6 +612,604 @@ format_mplus_number <- function(
   formatted_number
 }
 
+#-------------------------------------------------------------------------
+##### MPLUS OUTPUT HELPERS FOR FIGURES #####
+#-------------------------------------------------------------------------
+
+extract_growth_mean_parameter_indices <- function(
+    output_lines,
+    class_numbers = 1:3,
+    growth_parameters = c(
+      "BUR_I",
+      "BUR_S",
+      "BUR_Q"
+    )
+) {
+  technical_1_start <- grep(
+    "^[[:space:]]*TECHNICAL 1 OUTPUT[[:space:]]*$",
+    output_lines
+  )
+  
+  if (length(technical_1_start) != 1L) {
+    stop(
+      "TECHNICAL 1 OUTPUT could not be identified uniquely."
+    )
+  }
+  
+  starting_values_start <- grep(
+    paste0(
+      "^[[:space:]]*STARTING VALUES FOR ",
+      "LATENT CLASS 1[[:space:]]*$"
+    ),
+    output_lines
+  )
+  
+  starting_values_start <- starting_values_start[
+    starting_values_start > technical_1_start
+  ]
+  
+  if (length(starting_values_start) < 1L) {
+    stop(
+      "The end of TECHNICAL 1 OUTPUT could not be identified."
+    )
+  }
+  
+  technical_1_lines <- output_lines[
+    technical_1_start:
+      (starting_values_start[1] - 1L)
+  ]
+  
+  class_results <- lapply(
+    class_numbers,
+    function(class_number) {
+      class_start <- grep(
+        paste0(
+          "^[[:space:]]*PARAMETER SPECIFICATION FOR ",
+          "LATENT CLASS ",
+          class_number,
+          "[[:space:]]*$"
+        ),
+        technical_1_lines
+      )
+      
+      if (length(class_start) != 1L) {
+        stop(
+          "The TECH1 specification for latent class ",
+          class_number,
+          " could not be identified uniquely."
+        )
+      }
+      
+      all_class_sections <- grep(
+        paste0(
+          "^[[:space:]]*PARAMETER SPECIFICATION FOR ",
+          "LATENT CLASS"
+        ),
+        technical_1_lines
+      )
+      
+      later_class_sections <- all_class_sections[
+        all_class_sections > class_start
+      ]
+      
+      class_end <- if (
+        length(later_class_sections) == 0L
+      ) {
+        length(technical_1_lines)
+      } else {
+        later_class_sections[1] - 1L
+      }
+      
+      class_lines <- technical_1_lines[
+        class_start:class_end
+      ]
+      
+      alpha_start <- which(
+        trimws(class_lines) == "ALPHA"
+      )
+      
+      if (length(alpha_start) != 1L) {
+        stop(
+          "The ALPHA block for latent class ",
+          class_number,
+          " could not be identified uniquely."
+        )
+      }
+      
+      later_model_sections <- which(
+        seq_along(class_lines) > alpha_start &
+          trimws(class_lines) %in% c(
+            "BETA",
+            "PSI",
+            "THETA",
+            "NU",
+            "LAMBDA"
+          )
+      )
+      
+      alpha_end <- if (
+        length(later_model_sections) == 0L
+      ) {
+        length(class_lines)
+      } else {
+        later_model_sections[1] - 1L
+      }
+      
+      alpha_lines <- class_lines[
+        alpha_start:alpha_end
+      ]
+      
+      parameter_name_position <- which(
+        vapply(
+          alpha_lines,
+          function(line) {
+            line_parameters <- strsplit(
+              trimws(line),
+              "[[:space:]]+"
+            )[[1]]
+            
+            identical(
+              line_parameters,
+              growth_parameters
+            )
+          },
+          logical(1)
+        )
+      )
+      
+      if (length(parameter_name_position) != 1L) {
+        stop(
+          "The growth-parameter columns for latent class ",
+          class_number,
+          " could not be identified uniquely in ALPHA."
+        )
+      }
+      
+      parameter_number_pattern <- paste0(
+        "^[[:space:]]*1",
+        paste(
+          rep(
+            "[[:space:]]+[0-9]+",
+            length(growth_parameters)
+          ),
+          collapse = ""
+        ),
+        "[[:space:]]*$"
+      )
+      
+      parameter_number_position <- grep(
+        parameter_number_pattern,
+        alpha_lines
+      )
+      
+      parameter_number_position <-
+        parameter_number_position[
+          parameter_number_position >
+            parameter_name_position
+        ]
+      
+      if (length(parameter_number_position) != 1L) {
+        stop(
+          "The TECH3 parameter numbers for latent class ",
+          class_number,
+          " could not be identified uniquely."
+        )
+      }
+      
+      parameter_numbers <- as.integer(
+        strsplit(
+          trimws(
+            alpha_lines[
+              parameter_number_position
+            ]
+          ),
+          "[[:space:]]+"
+        )[[1]][-1]
+      )
+      
+      tibble::tibble(
+        .mplus_class = class_number,
+        .parameter = growth_parameters,
+        tech3_index = parameter_numbers
+      )
+    }
+  )
+  
+  parameter_lookup <- dplyr::bind_rows(
+    class_results
+  )
+  
+  if (
+    nrow(parameter_lookup) !=
+    length(class_numbers) *
+    length(growth_parameters) ||
+    anyNA(parameter_lookup$tech3_index) ||
+    anyDuplicated(
+      parameter_lookup$tech3_index
+    ) > 0L
+  ) {
+    stop(
+      paste(
+        "The class-specific TECH3 parameter mapping",
+        "is incomplete or duplicated."
+      )
+    )
+  }
+  
+  parameter_lookup
+}
+
+extract_tech3_covariance_matrix <- function(
+    output_lines
+) {
+  technical_3_start <- which(
+    grepl(
+      "^\\s*TECHNICAL 3 OUTPUT\\s*$",
+      output_lines
+    )
+  )
+  
+  if (length(technical_3_start) != 1L) {
+    stop(
+      paste(
+        "TECHNICAL 3 OUTPUT is missing or occurs more than once.",
+        "Request TECH3 in the M18 OUTPUT section and rerun the model."
+      )
+    )
+  }
+  
+  correlation_start <- which(
+    seq_along(output_lines) > technical_3_start &
+      grepl(
+        paste(
+          "ESTIMATED CORRELATION MATRIX",
+          "FOR PARAMETER ESTIMATES"
+        ),
+        output_lines,
+        fixed = TRUE
+      )
+  )
+  
+  if (length(correlation_start) < 1L) {
+    stop(
+      "The end of the TECH3 covariance matrix could not be identified."
+    )
+  }
+  
+  covariance_lines <- output_lines[
+    technical_3_start:
+      (correlation_start[1] - 1L)
+  ]
+  
+  covariance_header_positions <- which(
+    grepl(
+      paste(
+        "ESTIMATED COVARIANCE MATRIX",
+        "FOR PARAMETER ESTIMATES"
+      ),
+      covariance_lines,
+      fixed = TRUE
+    )
+  )
+  
+  if (length(covariance_header_positions) < 1L) {
+    stop(
+      "No parameter-estimate covariance blocks were found in TECH3."
+    )
+  }
+  
+  covariance_entries <- list()
+  maximum_parameter_number <- 0L
+  
+  for (block_number in seq_along(covariance_header_positions)) {
+    block_start <- covariance_header_positions[block_number]
+    
+    block_end <- if (
+      block_number < length(covariance_header_positions)
+    ) {
+      covariance_header_positions[block_number + 1L] - 1L
+    } else {
+      length(covariance_lines)
+    }
+    
+    block_lines <- covariance_lines[
+      block_start:block_end
+    ]
+    
+    column_header_position <- which(
+      grepl(
+        "^\\s*[0-9]+(?:\\s+[0-9]+)*\\s*$",
+        block_lines,
+        perl = TRUE
+      )
+    )
+    
+    if (length(column_header_position) < 1L) {
+      stop(
+        "A TECH3 covariance-matrix column header could not be read."
+      )
+    }
+    
+    column_header_position <- column_header_position[1]
+    
+    column_numbers <- as.integer(
+      strsplit(
+        trimws(
+          block_lines[column_header_position]
+        ),
+        "\\s+"
+      )[[1]]
+    )
+    
+    maximum_parameter_number <- max(
+      maximum_parameter_number,
+      column_numbers
+    )
+    
+    data_lines <- block_lines[
+      (column_header_position + 1L):
+        length(block_lines)
+    ]
+    
+    for (line in data_lines) {
+      tokens <- strsplit(
+        trimws(line),
+        "\\s+"
+      )[[1]]
+      
+      if (length(tokens) < 2L) {
+        next
+      }
+      
+      row_number <- suppressWarnings(
+        as.integer(tokens[1])
+      )
+      
+      values <- suppressWarnings(
+        as.numeric(
+          gsub(
+            "[dD]",
+            "E",
+            tokens[-1]
+          )
+        )
+      )
+      
+      if (
+        !is.finite(row_number) ||
+        any(!is.finite(values))
+      ) {
+        next
+      }
+      
+      eligible_columns <- column_numbers[
+        column_numbers <= row_number
+      ]
+      
+      if (length(values) != length(eligible_columns)) {
+        stop(
+          "A TECH3 covariance row has an unexpected number of values: ",
+          trimws(line)
+        )
+      }
+      
+      covariance_entries[[
+        length(covariance_entries) + 1L
+      ]] <- tibble::tibble(
+        row = row_number,
+        column = eligible_columns,
+        covariance = values
+      )
+      
+      maximum_parameter_number <- max(
+        maximum_parameter_number,
+        row_number
+      )
+    }
+  }
+  
+  covariance_entries <- dplyr::bind_rows(
+    covariance_entries
+  )
+  
+  if (
+    nrow(covariance_entries) == 0L ||
+    anyDuplicated(
+      paste(
+        covariance_entries$row,
+        covariance_entries$column,
+        sep = "_"
+      )
+    ) > 0L
+  ) {
+    stop(
+      "The TECH3 covariance entries are missing or duplicated."
+    )
+  }
+  
+  covariance_matrix <- matrix(
+    NA_real_,
+    nrow = maximum_parameter_number,
+    ncol = maximum_parameter_number
+  )
+  
+  covariance_matrix[
+    cbind(
+      covariance_entries$row,
+      covariance_entries$column
+    )
+  ] <- covariance_entries$covariance
+  
+  covariance_matrix[upper.tri(covariance_matrix)] <-
+    t(covariance_matrix)[upper.tri(covariance_matrix)]
+  
+  if (
+    any(!is.finite(diag(covariance_matrix))) ||
+    any(!is.finite(covariance_matrix)) ||
+    !isTRUE(
+      all.equal(
+        covariance_matrix,
+        t(covariance_matrix),
+        tolerance = 1e-10
+      )
+    )
+  ) {
+    stop(
+      "The reconstructed TECH3 covariance matrix is incomplete or asymmetric."
+    )
+  }
+  
+  covariance_matrix
+}
+
+##### DEFINE PANEL-B FORMATTING HELPERS #####
+
+format_integer_or_dash <- function(x) {
+  dplyr::if_else(
+    is.na(x),
+    "—",
+    format(
+      as.integer(
+        round(x)
+      ),
+      big.mark = ",",
+      scientific = FALSE,
+      trim = TRUE
+    )
+  )
+}
 
 
+format_fit_number_or_dash <- function(
+    x,
+    digits = 2L
+) {
+  dplyr::if_else(
+    is.na(x),
+    "—",
+    formatC(
+      x,
+      format = "f",
+      digits = digits,
+      big.mark = ","
+    )
+  )
+}
 
+
+format_decimal_or_dash <- function(
+    x,
+    digits = 3L
+) {
+  formatted_values <- sprintf(
+    paste0(
+      "%.",
+      digits,
+      "f"
+    ),
+    x
+  )
+  
+  formatted_values <- sub(
+    "^0\\.",
+    ".",
+    formatted_values
+  )
+  
+  formatted_values <- sub(
+    "^-0\\.",
+    "-.",
+    formatted_values
+  )
+  
+  formatted_values[
+    is.na(x)
+  ] <- "—"
+  
+  formatted_values
+}
+
+
+format_p_or_dash <- function(x) {
+  dplyr::case_when(
+    is.na(x) ~ "—",
+    x < .001 ~ "< .001",
+    TRUE ~ sub(
+      "^0\\.",
+      ".",
+      sprintf(
+        "%.3f",
+        x
+      )
+    )
+  )
+}
+
+
+format_smallest_class <- function(
+    class_n,
+    class_proportion
+) {
+  output <- rep(
+    "—",
+    length(class_n)
+  )
+  
+  available_values <- (
+    !is.na(class_n) &
+      !is.na(class_proportion)
+  )
+  
+  output[
+    available_values
+  ] <- sprintf(
+    "%d (%.1f%%)",
+    as.integer(
+      round(
+        class_n[
+          available_values
+        ]
+      )
+    ),
+    100 *
+      class_proportion[
+        available_values
+      ]
+  )
+  
+  output
+}
+
+scale_table_widths <- function(
+    widths,
+    maximum_width = 10.50
+) {
+  
+  total_width <- sum(
+    widths
+  )
+  
+  if (
+    total_width > maximum_width
+  ) {
+    
+    widths <- widths *
+      maximum_width /
+      total_width
+  }
+  
+  widths
+}
+
+heading_paragraph_properties <- officer::fp_par(
+  text.align = "left",
+  line_spacing = 2,
+  padding = 0,
+  keep_with_next = TRUE
+)
+
+note_paragraph_properties <- officer::fp_par(
+  text.align = "left",
+  line_spacing = 1,
+  padding = 0
+)
