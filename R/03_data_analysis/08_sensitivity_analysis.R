@@ -1,455 +1,171 @@
-# ============================================================
-# M20+ Sensitivitätsanalysen
-# ============================================================
+#-------------------------------------------------------------------------
+##### COMPLETE SENSITIVITY ANALYSIS: DIAGNOSIS MULTIGROUP LCS #####
+#-------------------------------------------------------------------------
 
-# Projektpfad: Code und Skripte
-PROJECT_DIR <- "C:/Users/keil/Documents/main_outcome_amis2"
+##### PROJECT AND STANDARD SETUP #####
 
-# Datenpfad: SeaDrive
-DATA_PREP_DIR <- paste0(
+project_dir <-
+  "C:/Users/keil/Documents/main_outcome_amis2"
+
+setup_file <- file.path(
+  project_dir,
+  "R",
+  "03_data_analysis",
+  "00_setup_standardized.R"
+)
+
+helper_file <- file.path(
+  project_dir,
+  "R",
+  "03_data_analysis",
+  "00_helper_functions.R"
+)
+
+stopifnot(
+  file.exists(setup_file),
+  file.exists(helper_file)
+)
+
+source(setup_file)
+source(helper_file)
+
+check_packages(
+  c(
+    "MplusAutomation",
+    "officer",
+    "flextable"
+  )
+)
+
+
+##### USER SETTINGS #####
+
+data_prep_dir <- paste0(
   "C:/Users/keil/seadrive_root/Jan Keil/",
   "Meine Bibliotheken/MAIN OUTCOME/02_data/02_data_Prep"
 )
 
-source(file.path(
-  PROJECT_DIR,
-  "R", "03_data_analysis", "00_setup_standardized.R"
-))
+mplus_input_dir <-
+  "C:/MPLUS/Inputs"
 
+# TRUE: create inputs and run them in Mplus.
+# FALSE: create inputs only.
+run_mplus_models <- TRUE
 
-# Finalen M18+SES-Datensatz suchen
-data_file <- list.files(
-  path        = DATA_PREP_DIR,
-  pattern     = "^AMIS_mplus_dataset_m18_ses_mo\\.rds$",
-  recursive   = TRUE,
-  full.names  = TRUE,
-  ignore.case = TRUE
+# Use "S20" here if only the unadjusted M20 counterpart is wanted.
+diag_mg_models_to_create <- c(
+  "S20",
+  "S21",
+  "S22"
 )
 
-if (length(data_file) != 1L) {
-  stop(
-    "Es wurde nicht genau eine passende Datei gefunden.\n",
-    paste(data_file, collapse = "\n")
+dir.create(
+  mplus_input_dir,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+
+##### SENSITIVITY: MULTIGROUP LCS BY AMIS-I DIAGNOSIS #####
+
+##### LOAD THE EXACT FINAL M18 + SES + MO MPLUS FILES #####
+
+# Do not use the generic mplus_* file objects created by the setup here.
+# They can point to an earlier dataset without mo_cls and sesausb.
+
+diag_mg_data_filename <-
+  "AMIS_mplus_dataset_m18_ses_mo.dat"
+
+diag_mg_names_filename <-
+  "AMIS_mplus_names_m18_ses_mo.rds"
+
+diag_mg_local_data_file <- file.path(
+  mplus_input_dir,
+  diag_mg_data_filename
+)
+
+diag_mg_local_names_file <- file.path(
+  mplus_input_dir,
+  diag_mg_names_filename
+)
+
+# Recover the exact files from SeaDrive only if they are not already local.
+if (
+  !file.exists(diag_mg_local_data_file) ||
+  !file.exists(diag_mg_local_names_file)
+) {
+  
+  diag_mg_seadrive_prep_dir <- data_prep_dir
+  
+  diag_mg_source_files <- list.files(
+    path = diag_mg_seadrive_prep_dir,
+    recursive = TRUE,
+    full.names = TRUE,
+    include.dirs = FALSE
   )
-}
-
-dat_m20 <- readRDS(data_file[[1]])
-dat_m20 <- as.data.frame(dat_m20)
-
-cat("Datei:", data_file[[1]], "\n")
-cat("Dimension:", nrow(dat_m20), "x", ncol(dat_m20), "\n")
-
-"mt_class_mo" %in% names(dat_m20)
-
-class_candidates <- grep(
-  "class|klass|m18|prob|mt_cl",
-  names(dat_m20),
-  value = TRUE,
-  ignore.case = TRUE
-)
-
-class_candidates
-
-# Zusätzlich die zuletzt angefügten Variablen anzeigen
-tail(names(dat_m20), 40)
-
-
-table(dat_m20$mo_cls, useNA = "ifany")
-
-with(
-  dat_m20,
-  table(stat_t5, mo_cls, useNA = "ifany")
-)
-
-anyDuplicated(dat_m20$SIC_N)
-
-
-
-
-relevant_vars <- grep(
-  "sdq|emo|hyp|con|ext|diag|ksads|papa|icd|dsm",
-  names(dat_m20),
-  value = TRUE,
-  ignore.case = TRUE
-)
-relevant_vars
-
-
-############################# BUILD CUT OFF ###########
-
-to_numeric <- function(x) {
-  if (is.factor(x)) x <- as.character(x)
-  suppressWarnings(as.numeric(x))
-}
-
-# Verwendete SDQ-Skalen und untere Auffälligkeitsgrenzen
-sdq_rules <- data.frame(
-  variable = c(
-    "emo_b2", "con_b2", "hyp_b2",
-    "emo_p2", "con_p2", "hyp_p2",
-    "emo_k2", "con_k2", "hyp_k2",
-    "emo_t2", "con_t2", "hyp_t2"
-  ),
-  informant = rep(c("b", "p", "k", "t"), each = 3),
-  cut_3band = c(
-    4, 3, 6,   # Bezugsperson
-    4, 3, 6,   # Eltern
-    6, 4, 6,   # Selbstbericht
-    5, 3, 6    # Lehrkraft
-  ),
-  cut_4band = c(
-    4, 3, 6,   # Bezugsperson
-    4, 3, 6,   # Eltern
-    5, 4, 6,   # Selbstbericht
-    4, 3, 6    # Lehrkraft
-  )
-)
-
-stopifnot(all(sdq_rules$variable %in% names(dat_m20)))
-
-# Diagnose prüfen: erwartet werden 0 = nein und 1 = ja
-diag01 <- to_numeric(dat_m20$diag_vor)
-
-bad_diag <- setdiff(unique(na.omit(diag01)), c(0, 1))
-if (length(bad_diag) > 0L) {
-  stop(
-    "diag_vor ist nicht sauber 0/1 codiert. Weitere Werte: ",
-    paste(bad_diag, collapse = ", ")
-  )
-}
-
-if ("has_diag" %in% names(dat_m20)) {
-  print(table(
-    has_diag = dat_m20$has_diag,
-    diag_vor = dat_m20$diag_vor,
-    useNA = "ifany"
-  ))
-}
-
-# SDQ-Werte als numerische Matrix
-sdq_scores <- do.call(
-  cbind,
-  lapply(dat_m20[sdq_rules$variable], to_numeric)
-)
-colnames(sdq_scores) <- sdq_rules$variable
-
-if (!all(is.na(sdq_scores) | (sdq_scores >= 0 & sdq_scores <= 10))) {
-  stop("Mindestens ein SDQ-Wert liegt außerhalb des gültigen Bereichs 0–10.")
-}
-
-# Auffälligkeit je einzelner Skala
-sdq_positive_3 <- sweep(
-  sdq_scores, 2, sdq_rules$cut_3band, FUN = ">="
-)
-
-sdq_positive_4 <- sweep(
-  sdq_scores, 2, sdq_rules$cut_4band, FUN = ">="
-)
-
-# Für eine negative Einstufung muss mindestens ein Informant
-# alle drei verwendeten Skalen beantwortet haben
-vars_by_informant <- split(
-  sdq_rules$variable,
-  sdq_rules$informant
-)
-
-complete_by_informant <- sapply(
-  vars_by_informant,
-  function(v) {
-    rowSums(!is.na(sdq_scores[, v, drop = FALSE])) == length(v)
+  
+  diag_mg_source_data_file <- diag_mg_source_files[
+    tolower(basename(diag_mg_source_files)) ==
+      tolower(diag_mg_data_filename)
+  ]
+  
+  diag_mg_source_names_file <- diag_mg_source_files[
+    tolower(basename(diag_mg_source_files)) ==
+      tolower(diag_mg_names_filename)
+  ]
+  
+  if (
+    length(diag_mg_source_data_file) != 1L ||
+    length(diag_mg_source_names_file) != 1L
+  ) {
+    stop(
+      "The exact final M18+SES+MO .dat and names files could not ",
+      "be identified uniquely in SeaDrive."
+    )
   }
-)
-
-has_complete_informant <- rowSums(complete_by_informant) > 0L
-
-make_binary_case <- function(sdq_positive) {
   
-  any_sdq_positive <- rowSums(sdq_positive, na.rm = TRUE) > 0L
-  
-  positive <- (!is.na(diag01) & diag01 == 1) |
-    any_sdq_positive
-  
-  negative <- (!is.na(diag01) & diag01 == 0) |
-    FALSE
-  
-  negative <- negative &
-    !any_sdq_positive &
-    has_complete_informant
-  
-  out <- rep(NA_integer_, length(diag01))
-  out[positive] <- 1L
-  out[negative] <- 0L
-  out
-}
-
-dat_m20_cut <- dat_m20
-
-dat_m20_cut$cas3_t2 <- make_binary_case(sdq_positive_3)
-dat_m20_cut$cas4_t2 <- make_binary_case(sdq_positive_4)
-
-# Verteilungen kontrollieren
-table(dat_m20_cut$cas3_t2, useNA = "ifany")
-table(dat_m20_cut$cas4_t2, useNA = "ifany")
-
-table(
-  cas3_t2 = dat_m20_cut$cas3_t2,
-  cas4_t2 = dat_m20_cut$cas4_t2,
-  useNA = "ifany"
-)
-
-############## PLAUSIBILITY ###############
-
-# Diagnose- versus SDQ-Beitrag
-diag_positive <- !is.na(diag01) & diag01 == 1
-sdq_positive  <- rowSums(sdq_positive_3, na.rm = TRUE) > 0
-
-source_3band <- ifelse(
-  diag_positive & sdq_positive, "Diagnose + SDQ",
-  ifelse(
-    diag_positive, "nur Diagnose",
-    ifelse(
-      sdq_positive, "nur SDQ",
-      ifelse(
-        dat_m20_cut$cas3_t2 == 0,
-        "unauffällig",
-        "nicht klassifizierbar"
+  if (!file.exists(diag_mg_local_data_file)) {
+    stopifnot(
+      file.copy(
+        from = diag_mg_source_data_file,
+        to = diag_mg_local_data_file,
+        overwrite = TRUE
       )
     )
-  )
-)
-
-table(source_3band, useNA = "ifany")
-
-sdq_audit <- data.frame(
-  variable = colnames(sdq_scores),
-  n_available = colSums(!is.na(sdq_scores)),
-  n_positive = colSums(sdq_positive_3, na.rm = TRUE)
-)
-
-sdq_audit$percent_positive <- round(
-  100 * sdq_audit$n_positive / sdq_audit$n_available,
-  1
-)
-
-sdq_audit
-
-addmargins(table(
-  mo_cls  = dat_m20_cut$mo_cls,
-  cas3_t2 = dat_m20_cut$cas3_t2,
-  useNA   = "ifany"
-))
-
-diag_cross_maltreated <- with(
-  subset(dat_m20_cut, mo_cls %in% c(2, 3, 4)),
-  addmargins(table(
-    mo_cls,
-    diag_vor,
-    useNA = "ifany"
-  ))
-)
-
-diag_cross_maltreated
-
-# Zeilenprozente
-with(
-  subset(dat_m20_cut, mo_cls %in% c(2, 3, 4)),
-  round(
-    100 * prop.table(
-      table(mo_cls, diag_vor),
-      margin = 1
-    ),
-    1
-  )
-)
-
-# Pro Informant: mindestens eine Skala borderline/auffällig
-positive_by_informant <- sapply(
-  vars_by_informant,
-  function(v) {
-    rowSums(
-      sdq_positive_3[, v, drop = FALSE],
-      na.rm = TRUE
-    ) > 0L
   }
-)
-
-n_positive_informants <- rowSums(positive_by_informant)
-n_complete_informants <- rowSums(complete_by_informant)
-
-# Reine SDQ-Variable:
-# 1 = mindestens zwei Informant:innen auffällig
-# 0 = mindestens zwei vollständige Urteile, aber weniger als zwei auffällig
-# NA = nicht ausreichend beurteilbar
-dat_m20_cut$sdq2_t2 <- NA_integer_
-
-dat_m20_cut$sdq2_t2[
-  n_positive_informants >= 2L
-] <- 1L
-
-dat_m20_cut$sdq2_t2[
-  n_positive_informants < 2L &
-    n_complete_informants >= 2L
-] <- 0L
-
-
-# Kombiniert mit Diagnose
-diag_positive <- !is.na(diag01) & diag01 == 1
-diag_negative <- !is.na(diag01) & diag01 == 0
-
-sdq2_positive <- !is.na(dat_m20_cut$sdq2_t2) &
-  dat_m20_cut$sdq2_t2 == 1
-
-sdq2_negative <- !is.na(dat_m20_cut$sdq2_t2) &
-  dat_m20_cut$sdq2_t2 == 0
-
-dat_m20_cut$cas2_t2 <- NA_integer_
-
-dat_m20_cut$cas2_t2[
-  diag_positive | sdq2_positive
-] <- 1L
-
-dat_m20_cut$cas2_t2[
-  diag_negative & sdq2_negative
-] <- 0L
-
-
-# Kontrollen
-table(n_positive_informants, useNA = "ifany")
-table(dat_m20_cut$sdq2_t2, useNA = "ifany")
-table(dat_m20_cut$cas2_t2, useNA = "ifany")
-
-addmargins(table(
-  mo_cls  = dat_m20_cut$mo_cls,
-  cas2_t2 = dat_m20_cut$cas2_t2,
-  useNA   = "ifany"
-))
-
-addmargins(table(
-  mo_cls  = dat_m20_cut$mo_cls,
-  sdq2_t2 = dat_m20_cut$sdq2_t2,
-  useNA   = "ifany"
-))
-
-
-# ############## CREATE OUTPUT ##############
-# OUTPUT_DIR <- "C:/MPLUS/Inputs"
-# dir.create(OUTPUT_DIR, recursive = TRUE, showWarnings = FALSE)
-# 
-# output_stub <- file.path(
-#   OUTPUT_DIR,
-#   "AMIS_m20_multigroup_caseness_t2"
-# )
-# 
-# # R-Version
-# saveRDS(
-#   dat_m20_cut,
-#   paste0(output_stub, ".rds")
-# )
-# 
-# # Mplus-Version
-# mplus_dat <- dat_m20_cut
-# 
-# logical_cols <- vapply(mplus_dat, is.logical, logical(1))
-# mplus_dat[logical_cols] <- lapply(
-#   mplus_dat[logical_cols],
-#   as.integer
-# )
-# 
-# non_numeric <- names(mplus_dat)[
-#   !vapply(mplus_dat, is.numeric, logical(1))
-# ]
-# 
-# if (length(non_numeric) > 0L) {
-#   stop(
-#     "Nichtnumerische Mplus-Variablen: ",
-#     paste(non_numeric, collapse = ", ")
-#   )
-# }
-# 
-# write.table(
-#   mplus_dat,
-#   file      = paste0(output_stub, ".dat"),
-#   sep       = "\t",
-#   row.names = FALSE,
-#   col.names = FALSE,
-#   quote     = FALSE,
-#   na        = "-9999"
-# )
-# 
-# # Variablennamen passend zur Spaltenreihenfolge
-# variable_names <- names(mplus_dat)
-# endings <- rep("", length(variable_names))
-# endings[length(endings)] <- ";"
-# 
-# writeLines(
-#   c("NAMES ARE", paste0(variable_names, endings)),
-#   paste0(output_stub, "_names.inp")
-# )
-# 
-# cat("Gespeichert:\n")
-# cat(paste0(output_stub, ".rds"), "\n")
-# cat(paste0(output_stub, ".dat"), "\n")
-# cat(paste0(output_stub, "_names.inp"), "\n")
-
-
-#-------------------------------------------------------------------------
-##### SENSITIVITY: MULTIGROUP LCS BY AMIS-I DIAGNOSIS #####
-#-------------------------------------------------------------------------
-
-##### RECOVER AND VALIDATE OBJECTS CREATED IN THE SETUP HEADER #####
-
-if (!exists("mplus_names", inherits = TRUE)) {
   
-  if (!exists("mplus_names_file_local", inherits = TRUE)) {
-    stop(
-      "Neither mplus_names nor mplus_names_file_local exists. ",
-      "Run the complete setup header before this block."
+  if (!file.exists(diag_mg_local_names_file)) {
+    stopifnot(
+      file.copy(
+        from = diag_mg_source_names_file,
+        to = diag_mg_local_names_file,
+        overwrite = TRUE
+      )
     )
   }
-  
-  if (!file.exists(mplus_names_file_local)) {
-    stop(
-      "The local Mplus names file does not exist: ",
-      mplus_names_file_local
-    )
-  }
-  
-  mplus_names <- readRDS(
-    mplus_names_file_local
-  )
 }
 
-if (!exists("mplus_data_file", inherits = TRUE)) {
-  stop(
-    "mplus_data_file does not exist. ",
-    "Run the complete setup header before this block."
-  )
-}
+# Override the generic setup objects with the exact matched file pair.
+mplus_data_file <- diag_mg_local_data_file
+mplus_names_file_local <- diag_mg_local_names_file
 
-if (!file.exists(mplus_data_file)) {
-  stop(
-    "The local Mplus data file does not exist: ",
-    mplus_data_file
-  )
-}
+mplus_names <- readRDS(
+  mplus_names_file_local
+)
 
-if (!exists("mplus_fields", inherits = TRUE)) {
-  mplus_fields <- count.fields(
-    mplus_data_file,
-    sep = "",
-    blank.lines.skip = TRUE
-  )
-}
+mplus_fields <- count.fields(
+  mplus_data_file,
+  sep = "",
+  blank.lines.skip = TRUE
+)
 
-if (!exists("names_syntax", inherits = TRUE)) {
-  names_syntax <- paste(
-    wrap_mplus_names(
-      mplus_names,
-      max_width = 88
-    ),
-    collapse = "\n"
-  )
-}
+names_syntax <- paste(
+  wrap_mplus_names(
+    mplus_names,
+    max_width = 88
+  ),
+  collapse = "\n"
+)
 
 stopifnot(
   is.character(mplus_names),
@@ -457,6 +173,84 @@ stopifnot(
   !anyNA(mplus_names),
   length(mplus_fields) > 0L,
   all(mplus_fields == length(mplus_names))
+)
+
+cat(
+  "Diagnosis-multigroup data:",
+  mplus_data_file,
+  "\n"
+)
+
+cat(
+  "Diagnosis-multigroup names:",
+  mplus_names_file_local,
+  "\n"
+)
+
+
+##### LOAD THE FINAL M7 MEASUREMENT-MODEL DEFINITION #####
+
+if (!exists("sdq_standard_measurement_model", inherits = TRUE)) {
+  
+  diag_mg_measurement_source_file <- file.path(
+    project_dir,
+    "R",
+    "03_data_analysis",
+    "01_create_mplus_inputs_final.R"
+  )
+  
+  if (!file.exists(diag_mg_measurement_source_file)) {
+    stop(
+      "The script containing sdq_standard_measurement_model ",
+      "does not exist: ",
+      diag_mg_measurement_source_file
+    )
+  }
+  
+  diag_mg_source_expressions <- parse(
+    file = diag_mg_measurement_source_file,
+    keep.source = FALSE
+  )
+  
+  diag_mg_measurement_assignment <- vapply(
+    diag_mg_source_expressions,
+    function(x) {
+      is.call(x) &&
+        length(x) >= 3L &&
+        identical(x[[1L]], as.name("<-")) &&
+        identical(
+          x[[2L]],
+          as.name("sdq_standard_measurement_model")
+        )
+    },
+    logical(1)
+  )
+  
+  if (sum(diag_mg_measurement_assignment) != 1L) {
+    stop(
+      "The definition of sdq_standard_measurement_model ",
+      "was not found exactly once in ",
+      diag_mg_measurement_source_file
+    )
+  }
+  
+  diag_mg_measurement_expression <-
+    diag_mg_source_expressions[[
+      which(diag_mg_measurement_assignment)
+    ]]
+  
+  # Evaluate only the right-hand side of this single assignment.
+  # The remainder of 01_create_mplus_inputs_final.R is not executed.
+  sdq_standard_measurement_model <- eval(
+    diag_mg_measurement_expression[[3L]],
+    envir = .GlobalEnv
+  )
+}
+
+stopifnot(
+  is.character(sdq_standard_measurement_model),
+  length(sdq_standard_measurement_model) == 1L,
+  nzchar(sdq_standard_measurement_model)
 )
 
 
@@ -472,6 +266,7 @@ diag_mg_indicator_variables <- c(
 )
 
 diag_mg_class_dummies <- c(
+  "c2",
   "c3",
   "c4"
 )
@@ -568,7 +363,7 @@ diag_mg_analysis_rows <- with(
   !is.na(stat_t5) &
     stat_t5 != 0 &
     !is.na(mo_cls) &
-    mo_cls >= 2 &
+    mo_cls >= 1 &
     mo_cls <= 4 &
     !is.na(diag_vor) &
     diag_vor %in% c(0, 1)
@@ -591,7 +386,7 @@ diag_mg_cell_table <- with(
   table(
     mo_cls = factor(
       mo_cls,
-      levels = 2:4
+      levels = 1:4
     ),
     diag_vor = factor(
       diag_vor,
@@ -623,9 +418,11 @@ if (any(diag_mg_cell_table < 10L)) {
 ##### DEFINE COMMON MULTIGROUP SYNTAX #####
 
 diag_mg_class_define_syntax <- "
+  c2 = 0;
   c3 = 0;
   c4 = 0;
 
+  IF (mo_cls EQ 2) THEN c2 = 1;
   IF (mo_cls EQ 3) THEN c3 = 1;
   IF (mo_cls EQ 4) THEN c4 = 1;
 "
@@ -633,7 +430,7 @@ diag_mg_class_define_syntax <- "
 diag_mg_group_model_syntax <- "
 MODEL nodx:
 
-  ! Class 2 is the reference trajectory in the no-diagnosis group
+  ! Class 1 is the reference class without diagnosis
 
   [EXT2@0];
   [EMO2@0];
@@ -641,37 +438,45 @@ MODEL nodx:
   [d_ext] (mdx0);
   [d_emo] (mdm0);
 
+  EXT2 ON c2 (e2c20);
   EXT2 ON c3 (e2c30);
   EXT2 ON c4 (e2c40);
 
+  EMO2 ON c2 (m2c20);
   EMO2 ON c3 (m2c30);
   EMO2 ON c4 (m2c40);
 
+  d_ext ON c2 (dxc20);
   d_ext ON c3 (dxc30);
   d_ext ON c4 (dxc40);
 
+  d_emo ON c2 (dmc20);
   d_emo ON c3 (dmc30);
   d_emo ON c4 (dmc40);
 
 MODEL dx:
 
-  ! Class 2 is the reference trajectory in the diagnosis group
+  ! Class 1 is the reference class with diagnosis
 
-  [EXT2] (be21);
-  [EMO2] (bm21);
+  [EXT2] (be11);
+  [EMO2] (bm11);
 
   [d_ext] (mdx1);
   [d_emo] (mdm1);
 
+  EXT2 ON c2 (e2c21);
   EXT2 ON c3 (e2c31);
   EXT2 ON c4 (e2c41);
 
+  EMO2 ON c2 (m2c21);
   EMO2 ON c3 (m2c31);
   EMO2 ON c4 (m2c41);
 
+  d_ext ON c2 (dxc21);
   d_ext ON c3 (dxc31);
   d_ext ON c4 (dxc41);
 
+  d_emo ON c2 (dmc21);
   d_emo ON c3 (dmc31);
   d_emo ON c4 (dmc41);
 "
@@ -680,115 +485,71 @@ diag_mg_constraint_syntax <- "
 MODEL CONSTRAINT:
 
   NEW(
-    ex2_2n ex2_3n ex2_4n
-    ex2_2d ex2_3d ex2_4d
-    ex5_2n ex5_3n ex5_4n
-    ex5_2d ex5_3d ex5_4d
+    dex_1n dex_2n dex_3n dex_4n
+    dex_1d dex_2d dex_3d dex_4d
+    dem_1n dem_2n dem_3n dem_4n
+    dem_1d dem_2d dem_3d dem_4d
 
-    em2_2n em2_3n em2_4n
-    em2_2d em2_3d em2_4d
-    em5_2n em5_3n em5_4n
-    em5_2d em5_3d em5_4d
+    gdx_1 gdx_2 gdx_3 gdx_4
+    gdm_1 gdm_2 gdm_3 gdm_4
 
-    dex_2n dex_3n dex_4n
-    dex_2d dex_3d dex_4d
-    dem_2n dem_3n dem_4n
-    dem_2d dem_3d dem_4d
-
-    gdx_2 gdx_3 gdx_4
-    gdm_2 gdm_3 gdm_4
-
-    intx_3 intx_4 intx_43
-    intm_3 intm_4 intm_43
+    intx_2 intx_3 intx_4
+    intm_2 intm_3 intm_4
   );
 
-  ! Class-specific T2 levels: no diagnosis
+  ! Class-specific externalizing change
 
-  ex2_2n = 0;
-  ex2_3n = e2c30;
-  ex2_4n = e2c40;
-
-  em2_2n = 0;
-  em2_3n = m2c30;
-  em2_4n = m2c40;
-
-  ! Class-specific T2 levels: diagnosis
-
-  ex2_2d = be21;
-  ex2_3d = be21 + e2c31;
-  ex2_4d = be21 + e2c41;
-
-  em2_2d = bm21;
-  em2_3d = bm21 + m2c31;
-  em2_4d = bm21 + m2c41;
-
-  ! Class-specific latent changes: no diagnosis
-
-  dex_2n = mdx0;
+  dex_1n = mdx0;
+  dex_2n = mdx0 + dxc20;
   dex_3n = mdx0 + dxc30;
   dex_4n = mdx0 + dxc40;
 
-  dem_2n = mdm0;
-  dem_3n = mdm0 + dmc30;
-  dem_4n = mdm0 + dmc40;
-
-  ! Class-specific latent changes: diagnosis
-
-  dex_2d = mdx1;
+  dex_1d = mdx1;
+  dex_2d = mdx1 + dxc21;
   dex_3d = mdx1 + dxc31;
   dex_4d = mdx1 + dxc41;
 
-  dem_2d = mdm1;
+  ! Class-specific emotional-problems change
+
+  dem_1n = mdm0;
+  dem_2n = mdm0 + dmc20;
+  dem_3n = mdm0 + dmc30;
+  dem_4n = mdm0 + dmc40;
+
+  dem_1d = mdm1;
+  dem_2d = mdm1 + dmc21;
   dem_3d = mdm1 + dmc31;
   dem_4d = mdm1 + dmc41;
 
-  ! Class-specific T5 levels
+  ! Diagnosis-group differences within classes
 
-  ex5_2n = ex2_2n + dex_2n;
-  ex5_3n = ex2_3n + dex_3n;
-  ex5_4n = ex2_4n + dex_4n;
-
-  ex5_2d = ex2_2d + dex_2d;
-  ex5_3d = ex2_3d + dex_3d;
-  ex5_4d = ex2_4d + dex_4d;
-
-  em5_2n = em2_2n + dem_2n;
-  em5_3n = em2_3n + dem_3n;
-  em5_4n = em2_4n + dem_4n;
-
-  em5_2d = em2_2d + dem_2d;
-  em5_3d = em2_3d + dem_3d;
-  em5_4d = em2_4d + dem_4d;
-
-  ! Diagnosis-group differences in change within each class
-  ! Positive values indicate more positive change in the diagnosis group
-
+  gdx_1 = dex_1d - dex_1n;
   gdx_2 = dex_2d - dex_2n;
   gdx_3 = dex_3d - dex_3n;
   gdx_4 = dex_4d - dex_4n;
 
+  gdm_1 = dem_1d - dem_1n;
   gdm_2 = dem_2d - dem_2n;
   gdm_3 = dem_3d - dem_3n;
   gdm_4 = dem_4d - dem_4n;
 
-  ! Class x diagnosis interactions on latent change
-  ! Difference in a class contrast between diagnosis groups
+  ! Class x diagnosis interactions relative to class 1
 
+  intx_2 = dxc21 - dxc20;
   intx_3 = dxc31 - dxc30;
   intx_4 = dxc41 - dxc40;
 
+  intm_2 = dmc21 - dmc20;
   intm_3 = dmc31 - dmc30;
   intm_4 = dmc41 - dmc40;
 
-  ! Difference in the class-4 versus class-3 contrast
-
-  intx_43 = (dxc41 - dxc31) - (dxc40 - dxc30);
-  intm_43 = (dmc41 - dmc31) - (dmc40 - dmc30);
-
 MODEL TEST:
 
+  0 = dxc21 - dxc20;
   0 = dxc31 - dxc30;
   0 = dxc41 - dxc40;
+
+  0 = dmc21 - dmc20;
   0 = dmc31 - dmc30;
   0 = dmc41 - dmc40;
 "
@@ -943,10 +704,8 @@ create_diag_mg_lcs_input <- function(
     "\n    ;\n\n",
     "  USEOBSERVATIONS =\n",
     "    (stat_t5 NE 0) AND\n",
-    "    (mo_cls GE 2) AND\n",
-    "    (mo_cls LE 4) AND\n",
-    "    (diag_vor GE 0) AND\n",
-    "    (diag_vor LE 1);\n\n",
+    "    (mo_cls GE 1) AND\n",
+    "    (mo_cls LE 4);\n\n",
     "  IDVARIABLE = SIC_N;\n\n",
     "  GROUPING = diag_vor\n",
     "    (0 = nodx 1 = dx);\n\n",
@@ -980,6 +739,11 @@ create_diag_mg_lcs_input <- function(
     "  EMO2 WITH d_ext;\n",
     "  EMO2 WITH d_emo;\n",
     "  d_ext WITH d_emo;\n\n",
+    "  ! Class effects declared for all groups\n\n",
+    "  EXT2 ON c2 c3 c4;\n",
+    "  EMO2 ON c2 c3 c4;\n",
+    "  d_ext ON c2 c3 c4;\n",
+    "  d_emo ON c2 c3 c4;\n\n",
     if (nzchar(additional_predictor_syntax)) {
       paste0(
         "  ! Covariate effects constrained equal across diagnosis groups\n\n",
@@ -1006,19 +770,8 @@ create_diag_mg_lcs_input <- function(
     input_filename
   )
   
-  github_input_file <- file.path(
-    github_m18_lcs_dir,
-    input_filename
-  )
-  
   dir.create(
     dirname(local_input_file),
-    recursive = TRUE,
-    showWarnings = FALSE
-  )
-  
-  dir.create(
-    dirname(github_input_file),
     recursive = TRUE,
     showWarnings = FALSE
   )
@@ -1028,25 +781,6 @@ create_diag_mg_lcs_input <- function(
     con = local_input_file,
     useBytes = TRUE
   )
-  
-  if (
-    normalizePath(
-      local_input_file,
-      winslash = "/",
-      mustWork = FALSE
-    ) !=
-    normalizePath(
-      github_input_file,
-      winslash = "/",
-      mustWork = FALSE
-    )
-  ) {
-    writeLines(
-      input_syntax,
-      con = github_input_file,
-      useBytes = TRUE
-    )
-  }
   
   stopifnot(
     file.exists(local_input_file),
@@ -1113,14 +847,6 @@ diag_mg_model_settings <- list(
       "sesausb"
     )
   )
-)
-
-# Select c("S20", "S21", "S22") for the complete series.
-# For the unadjusted counterpart of M20 only, use "S20".
-diag_mg_models_to_create <- c(
-  "S20",
-  "S21",
-  "S22"
 )
 
 if (
@@ -1197,7 +923,7 @@ if (isTRUE(run_mplus_models)) {
     target = diag_mg_input_files,
     replaceOutfile = "always",
     showOutput = FALSE,
-    logFile = FALSE,
+    logFile = NULL,
     quiet = FALSE
   )
   
@@ -1208,3 +934,18 @@ if (isTRUE(run_mplus_models)) {
     "but Mplus execution was skipped."
   )
 }
+
+with(
+  subset(
+    diag_mg_audit_data,
+    stat_t5 != 0 &
+      mo_cls %in% 1:4 &
+      !is.na(diag_vor)
+  ),
+  addmargins(
+    table(mo_cls, diag_vor)
+  )
+)
+
+
+
