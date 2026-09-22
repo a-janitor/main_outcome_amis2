@@ -5393,3 +5393,736 @@ if (isTRUE(run_mplus_models)) {
     )
   )
 }
+
+#-------------------------------------------------------------------------
+##### M27-M29: MODERATION OF CLASS EFFECTS ON LATENT CHANGE #####
+#-------------------------------------------------------------------------
+
+##### DEFINE REUSABLE MODERATION INPUT FUNCTION #####
+
+create_class_moderation_lcs_input <- function(
+    model_number,
+    model_name,
+    input_filename,
+    moderator,
+    moderator_tag,
+    covariate_predictors,
+    center_predictors,
+    covariates,
+    model_role,
+    notes = ""
+) {
+  
+  stopifnot(
+    length(model_number) == 1L,
+    length(model_name) == 1L,
+    nzchar(model_name),
+    length(input_filename) == 1L,
+    nzchar(input_filename),
+    length(moderator) == 1L,
+    nzchar(moderator),
+    length(moderator_tag) == 1L,
+    nzchar(moderator_tag),
+    length(covariates) == 1L,
+    length(model_role) == 1L
+  )
+  
+  additional_predictors <- unique(
+    c(
+      covariate_predictors,
+      moderator
+    )
+  )
+  
+  center_predictors <- unique(
+    center_predictors
+  )
+  
+  predictors_not_in_model <- center_predictors[
+    !toupper(center_predictors) %in%
+      toupper(additional_predictors)
+  ]
+  
+  if (length(predictors_not_in_model) > 0L) {
+    stop(
+      "Variables requested for centering are not included ",
+      "as predictors:\n",
+      paste(
+        predictors_not_in_model,
+        collapse = "\n"
+      )
+    )
+  }
+  
+  missing_predictors <- additional_predictors[
+    !toupper(additional_predictors) %in%
+      toupper(outcome_mplus_names)
+  ]
+  
+  if (length(missing_predictors) > 0L) {
+    stop(
+      "The following moderation-model predictors are missing ",
+      "from the final Mplus dataset:\n",
+      paste(
+        missing_predictors,
+        collapse = "\n"
+      )
+    )
+  }
+  
+  interaction_variables <- paste0(
+    "i",
+    2:4,
+    moderator_tag
+  )
+  
+  if (any(nchar(interaction_variables) > 8L)) {
+    stop(
+      "Mplus interaction-variable names must not exceed ",
+      "eight characters."
+    )
+  }
+  
+  usevariables <- c(
+    outcome_indicator_variables,
+    additional_predictors,
+    outcome_class_dummies,
+    interaction_variables
+  )
+  
+  usevariables_syntax <- paste(
+    wrap_mplus_names(
+      usevariables,
+      max_width = 88
+    ),
+    collapse = "\n"
+  )
+  
+  center_predictor_syntax <- if (
+    length(center_predictors) == 0L
+  ) {
+    
+    ""
+    
+  } else {
+    
+    paste0(
+      "\n  CENTER\n",
+      paste(
+        wrap_mplus_names(
+          center_predictors,
+          max_width = 88,
+          indent = "    "
+        ),
+        collapse = "\n"
+      ),
+      "\n    (GRANDMEAN);\n"
+    )
+  }
+  
+  interaction_define_syntax <- paste0(
+    "\n",
+    "  ! Class-by-moderator interaction terms\n\n",
+    "  ",
+    interaction_variables[1L],
+    " = c2 * ",
+    moderator,
+    ";\n",
+    "  ",
+    interaction_variables[2L],
+    " = c3 * ",
+    moderator,
+    ";\n",
+    "  ",
+    interaction_variables[3L],
+    " = c4 * ",
+    moderator,
+    ";\n"
+  )
+  
+  covariate_predictor_syntax <- if (
+    length(covariate_predictors) == 0L
+  ) {
+    
+    ""
+    
+  } else {
+    
+    paste0(
+      "\n\n",
+      "  ! Effects of covariates on baseline and change\n\n",
+      "  EXT2 EMO2 d_ext d_emo ON\n",
+      paste(
+        wrap_mplus_names(
+          covariate_predictors,
+          max_width = 88,
+          indent = "    "
+        ),
+        collapse = "\n"
+      ),
+      ";"
+    )
+  }
+  
+  moderator_main_effect_syntax <- paste0(
+    "\n\n",
+    "  ! Moderator main effects on baseline and change\n\n",
+    "  EXT2 ON ",
+    moderator,
+    " (bex_mod);\n",
+    "  EMO2 ON ",
+    moderator,
+    " (bem_mod);\n",
+    "  d_ext ON ",
+    moderator,
+    " (bdx_mod);\n",
+    "  d_emo ON ",
+    moderator,
+    " (bdm_mod);\n"
+  )
+  
+  interaction_model_syntax <- paste0(
+    "\n",
+    "  ! Class-by-moderator interactions on latent change\n\n",
+    "  d_ext ON ",
+    interaction_variables[1L],
+    " (dxi2);\n",
+    "  d_ext ON ",
+    interaction_variables[2L],
+    " (dxi3);\n",
+    "  d_ext ON ",
+    interaction_variables[3L],
+    " (dxi4);\n\n",
+    "  d_emo ON ",
+    interaction_variables[1L],
+    " (dmi2);\n",
+    "  d_emo ON ",
+    interaction_variables[2L],
+    " (dmi3);\n",
+    "  d_emo ON ",
+    interaction_variables[3L],
+    " (dmi4);\n"
+  )
+  
+  moderation_constraint_syntax <- sub(
+    fixed = TRUE,
+    
+    pattern = paste0(
+      "    dm_2v1 dm_3v1 dm_4v1\n",
+      "    dm_3v2 dm_4v2 dm_4v3\n",
+      "  );"
+    ),
+    
+    replacement = paste0(
+      "    dm_2v1 dm_3v1 dm_4v1\n",
+      "    dm_3v2 dm_4v2 dm_4v3\n\n",
+      "    sdx_c1 sdx_c2 sdx_c3 sdx_c4\n",
+      "    sdm_c1 sdm_c2 sdm_c3 sdm_c4\n\n",
+      "    idx_2v1 idx_3v1 idx_4v1\n",
+      "    idx_3v2 idx_4v2 idx_4v3\n\n",
+      "    idm_2v1 idm_3v1 idm_4v1\n",
+      "    idm_3v2 idm_4v2 idm_4v3\n",
+      "  );"
+    ),
+    
+    x = outcome_change_constraint_syntax
+  )
+  
+  moderation_constraint_syntax <- paste0(
+    moderation_constraint_syntax,
+    "\n",
+    "  ! Class-specific moderator effects on externalizing change\n\n",
+    "  sdx_c1 = bdx_mod;\n",
+    "  sdx_c2 = bdx_mod + dxi2;\n",
+    "  sdx_c3 = bdx_mod + dxi3;\n",
+    "  sdx_c4 = bdx_mod + dxi4;\n\n",
+    
+    "  ! Class-specific moderator effects on emotional change\n\n",
+    "  sdm_c1 = bdm_mod;\n",
+    "  sdm_c2 = bdm_mod + dmi2;\n",
+    "  sdm_c3 = bdm_mod + dmi3;\n",
+    "  sdm_c4 = bdm_mod + dmi4;\n\n",
+    
+    "  ! Pairwise differences in externalizing moderation effects\n\n",
+    "  idx_2v1 = dxi2;\n",
+    "  idx_3v1 = dxi3;\n",
+    "  idx_4v1 = dxi4;\n",
+    "  idx_3v2 = dxi3 - dxi2;\n",
+    "  idx_4v2 = dxi4 - dxi2;\n",
+    "  idx_4v3 = dxi4 - dxi3;\n\n",
+    
+    "  ! Pairwise differences in emotional moderation effects\n\n",
+    "  idm_2v1 = dmi2;\n",
+    "  idm_3v1 = dmi3;\n",
+    "  idm_4v1 = dmi4;\n",
+    "  idm_3v2 = dmi3 - dmi2;\n",
+    "  idm_4v2 = dmi4 - dmi2;\n",
+    "  idm_4v3 = dmi4 - dmi3;\n"
+  )
+  
+  moderation_test_syntax <- paste0(
+    "\n",
+    "MODEL TEST:\n\n",
+    "  ! Joint six-degree-of-freedom test of moderation\n\n",
+    "  0 = dxi2;\n",
+    "  0 = dxi3;\n",
+    "  0 = dxi4;\n",
+    "  0 = dmi2;\n",
+    "  0 = dmi3;\n",
+    "  0 = dmi4;\n"
+  )
+  
+  model_id <- paste0(
+    "M",
+    model_number
+  )
+  
+  title_syntax <- paste0(
+    paste(
+      strwrap(
+        paste0(
+          model_id,
+          ": ",
+          model_name
+        ),
+        width = 84,
+        indent = 2,
+        exdent = 2
+      ),
+      collapse = "\n"
+    ),
+    ";"
+  )
+  
+  input_syntax <- paste0(
+    "TITLE:
+", title_syntax, "
+
+DATA:
+  FILE = ", basename(outcome_mplus_data_file), ";
+
+VARIABLE:
+  NAMES =
+", outcome_names_syntax, "
+    ;
+
+  USEVARIABLES =
+", usevariables_syntax, "
+    ;
+
+  USEOBSERVATIONS =
+    (stat_t5 NE 0) AND
+    (mo_cls GE 1) AND
+    (mo_cls LE 4);
+
+  IDVARIABLE = SIC_N;
+
+  MISSING = ALL (-999);
+
+DEFINE:
+", outcome_class_define_syntax,
+    center_predictor_syntax,
+    interaction_define_syntax, "
+
+ANALYSIS:
+  ESTIMATOR = MLR;
+  COVERAGE = 0.01;
+
+MODEL:
+", sdq_standard_measurement_model, "
+
+  ! Classical two-wave latent change score model
+
+  ! Externalizing change
+
+  d_ext BY EXT5@1;
+
+  EXT5 ON EXT2@1;
+
+  EXT5@0;
+  [EXT5@0];
+
+  ! Emotional-problems change
+
+  d_emo BY EMO5@1;
+
+  EMO5 ON EMO2@1;
+
+  EMO5@0;
+  [EMO5@0];
+
+  ! Baseline latent means fixed for factor identification
+
+  [EXT2@0];
+  [EMO2@0];
+
+  ! Latent change intercepts in the reference class
+
+  [d_ext] (m_dext);
+  [d_emo] (m_demo);
+
+  ! Baseline and latent-change residual variances
+
+  EXT2;
+  EMO2;
+
+  d_ext;
+  d_emo;
+
+  ! Covariance between baseline levels
+
+  EXT2 WITH EMO2;
+
+  ! Covariances between baseline levels and latent changes
+
+  EXT2 WITH d_ext;
+  EXT2 WITH d_emo;
+
+  EMO2 WITH d_ext;
+  EMO2 WITH d_emo;
+
+  ! Covariance between latent changes
+
+  d_ext WITH d_emo;
+
+", outcome_class_effect_syntax,
+    covariate_predictor_syntax,
+    moderator_main_effect_syntax,
+    interaction_model_syntax, "
+
+", moderation_constraint_syntax, "
+
+", moderation_test_syntax, "
+
+OUTPUT:
+  SAMPSTAT
+  STANDARDIZED
+  CINTERVAL
+  TECH1
+  TECH4;
+"
+  )
+  
+  write_mplus_input(
+    syntax = input_syntax,
+    filename = input_filename,
+    github_dir = github_m18_lcs_dir,
+    
+    documentation = list(
+      model_id = model_id,
+      
+      model_name = model_name,
+      
+      model_family =
+        "Moderated conditional latent change score model",
+      
+      script =
+        "01_create_mplus_inputs_final.R",
+      
+      sample = paste(
+        "Participants with stat_t5 NE 0, valid",
+        "four-group maltreatment classification, and",
+        "available moderator and covariate data"
+      ),
+      
+      estimator = "MLR",
+      
+      specification = paste(
+        "Bivariate latent change score model for",
+        "externalizing and emotional problems;",
+        "measurement model fixed to the final M7",
+        "partial scalar invariance specification;",
+        "class 1 is the non-maltreated reference group;",
+        "class-by-moderator product terms predict",
+        "externalizing and emotional latent change"
+      ),
+      
+      residual_covariances = paste(
+        "Inherited unchanged from",
+        "sdq_standard_measurement_model"
+      ),
+      
+      covariates = covariates,
+      
+      model_role = model_role,
+      
+      notes = notes
+    )
+  )
+}
+
+
+##### DEFINE MODERATION MODEL SETTINGS #####
+
+outcome_moderation_model_settings <- list(
+  
+  M27 = list(
+    model_number = 27L,
+    
+    model_name = paste(
+      "Maltreatment-class differences in latent",
+      "psychopathology change moderated by",
+      "European-ancestry MDD polygenic risk"
+    ),
+    
+    input_filename =
+      "27_sdq_lcs_class_by_prs_eau_moderation_mo.inp",
+    
+    moderator =
+      "prs_eau",
+    
+    moderator_tag =
+      "prs",
+    
+    covariate_predictors = c(
+      "aget2",
+      "sext5",
+      "sesausb",
+      "PC1",
+      "PC2",
+      "PC3",
+      "PC4"
+    ),
+    
+    center_predictors = c(
+      "aget2",
+      "sext5",
+      "sesausb",
+      "PC1",
+      "PC2",
+      "PC3",
+      "PC4",
+      "prs_eau"
+    ),
+    
+    covariates = paste(
+      "Baseline age, sex, maternal educational attainment,",
+      "PC1-PC4, and European-ancestry MDD polygenic risk;",
+      "all predictors grand-mean centered"
+    ),
+    
+    model_role = paste(
+      "Exploratory test of whether European-ancestry",
+      "MDD polygenic risk moderates associations between",
+      "maltreatment class and latent psychopathology change"
+    ),
+    
+    notes = paste(
+      "M27 extends M23a by adding class-by-prs_eau",
+      "interaction terms for d_ext and d_emo;",
+      "class 1 is the non-maltreated reference group;",
+      "prs_eau is grand-mean centered before creating",
+      "the interaction terms;",
+      "PC1-PC4 adjust for genetic ancestry;",
+      "MODEL CONSTRAINT provides class-specific PRS slopes",
+      "and all pairwise differences between slopes;",
+      "MODEL TEST provides a joint six-degree-of-freedom",
+      "test of all PRS moderation parameters"
+    )
+  ),
+  
+  M28 = list(
+    model_number = 28L,
+    
+    model_name = paste(
+      "Maltreatment-class differences in latent",
+      "psychopathology change moderated by",
+      "proximal-segment hair cortisol"
+    ),
+    
+    input_filename =
+      "28_sdq_lcs_class_by_hair_cortisol_moderation_mo.inp",
+    
+    moderator =
+      "c2p1_z",
+    
+    moderator_tag =
+      "hcc",
+    
+    covariate_predictors = c(
+      "aget2",
+      "sext5",
+      "sesausb"
+    ),
+    
+    center_predictors = c(
+      "aget2",
+      "sext5",
+      "sesausb",
+      "c2p1_z"
+    ),
+    
+    covariates = paste(
+      "Baseline age, sex, maternal educational attainment,",
+      "and standardized proximal-segment hair cortisol;",
+      "all predictors grand-mean centered"
+    ),
+    
+    model_role = paste(
+      "Exploratory test of whether proximal-segment",
+      "hair cortisol moderates associations between",
+      "maltreatment class and latent psychopathology change"
+    ),
+    
+    notes = paste(
+      "M28 extends M24 by adding class-by-c2p1_z",
+      "interaction terms for d_ext and d_emo;",
+      "class 1 is the non-maltreated reference group;",
+      "c2p1_z is grand-mean centered before creating",
+      "the interaction terms;",
+      "MODEL CONSTRAINT provides class-specific HCC slopes",
+      "and all pairwise differences between slopes;",
+      "MODEL TEST provides a joint six-degree-of-freedom",
+      "test of all HCC moderation parameters"
+    )
+  ),
+  
+  M29 = list(
+    model_number = 29L,
+    
+    model_name = paste(
+      "Maltreatment-class differences in latent",
+      "psychopathology change moderated by",
+      "prior psychiatric diagnosis"
+    ),
+    
+    input_filename =
+      "29_sdq_lcs_class_by_diagnosis_moderation_mo.inp",
+    
+    moderator =
+      "diag_vor",
+    
+    moderator_tag =
+      "diag",
+    
+    covariate_predictors = c(
+      "aget2",
+      "sext5",
+      "sesausb"
+    ),
+    
+    center_predictors = c(
+      "aget2",
+      "sext5",
+      "sesausb"
+    ),
+    
+    covariates = paste(
+      "Baseline age, sex, maternal educational attainment,",
+      "and prior psychiatric diagnosis;",
+      "sociodemographic covariates grand-mean centered;",
+      "binary diagnosis variable retained in its original",
+      "zero-versus-one coding"
+    ),
+    
+    model_role = paste(
+      "Exploratory test of whether prior psychiatric",
+      "diagnosis moderates associations between",
+      "maltreatment class and latent psychopathology change"
+    ),
+    
+    notes = paste(
+      "M29 extends M22 by adding diag_vor and",
+      "class-by-diagnosis interaction terms for",
+      "d_ext and d_emo;",
+      "class 1 is the non-maltreated reference group;",
+      "diag_vor is not centered, so class main effects",
+      "refer to participants without a prior diagnosis;",
+      "class-specific diagnosis slopes represent the",
+      "difference between diagnosis groups within each class;",
+      "MODEL TEST provides a joint six-degree-of-freedom",
+      "test of all diagnosis moderation parameters"
+    )
+  )
+)
+
+
+##### ADD M27-M29 TO COMMON MODEL SETTINGS #####
+
+outcome_model_settings <- c(
+  outcome_model_settings,
+  outcome_moderation_model_settings
+)
+
+
+##### CREATE M27-M29 INPUTS #####
+
+outcome_moderation_model_files <- lapply(
+  outcome_moderation_model_settings,
+  function(settings) {
+    do.call(
+      create_class_moderation_lcs_input,
+      settings
+    )
+  }
+)
+
+outcome_moderation_input_files <- unname(
+  vapply(
+    outcome_moderation_model_files,
+    identity,
+    character(1)
+  )
+)
+
+input_file_m27 <-
+  outcome_moderation_model_files$M27
+
+input_file_m28 <-
+  outcome_moderation_model_files$M28
+
+input_file_m29 <-
+  outcome_moderation_model_files$M29
+
+
+##### CHECK M27-M29 INPUTS #####
+
+missing_moderation_input_files <-
+  outcome_moderation_input_files[
+    !file.exists(
+      outcome_moderation_input_files
+    )
+  ]
+
+if (length(missing_moderation_input_files) > 0L) {
+  stop(
+    "The following moderation input files are missing:\n",
+    paste(
+      missing_moderation_input_files,
+      collapse = "\n"
+    )
+  )
+}
+
+
+##### RUN M27-M29 #####
+
+if (isTRUE(run_mplus_models)) {
+  
+  if (
+    MplusAutomation::mplusAvailable(
+      silent = FALSE
+    ) != 0
+  ) {
+    stop(
+      "Mplus could not be detected by MplusAutomation."
+    )
+  }
+  
+  MplusAutomation::runModels(
+    target = outcome_moderation_input_files,
+    replaceOutfile = "always",
+    showOutput = FALSE,
+    logFile = NULL,
+    quiet = FALSE
+  )
+  
+} else {
+  
+  message(
+    paste(
+      "M27-M29 moderation inputs were created,",
+      "but Mplus execution was skipped."
+    )
+  )
+}
