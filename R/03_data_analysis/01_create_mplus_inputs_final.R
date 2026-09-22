@@ -5583,7 +5583,30 @@ create_class_moderation_lcs_input <- function(
   
   interaction_model_syntax <- paste0(
     "\n",
+    "  ! Class-by-moderator interactions on baseline levels\n\n",
+    
+    "  EXT2 ON ",
+    interaction_variables[1L],
+    " (exi2);\n",
+    "  EXT2 ON ",
+    interaction_variables[2L],
+    " (exi3);\n",
+    "  EXT2 ON ",
+    interaction_variables[3L],
+    " (exi4);\n\n",
+    
+    "  EMO2 ON ",
+    interaction_variables[1L],
+    " (emi2);\n",
+    "  EMO2 ON ",
+    interaction_variables[2L],
+    " (emi3);\n",
+    "  EMO2 ON ",
+    interaction_variables[3L],
+    " (emi4);\n\n",
+    
     "  ! Class-by-moderator interactions on latent change\n\n",
+    
     "  d_ext ON ",
     interaction_variables[1L],
     " (dxi2);\n",
@@ -5593,6 +5616,7 @@ create_class_moderation_lcs_input <- function(
     "  d_ext ON ",
     interaction_variables[3L],
     " (dxi4);\n\n",
+    
     "  d_emo ON ",
     interaction_variables[1L],
     " (dmi2);\n",
@@ -5616,10 +5640,19 @@ create_class_moderation_lcs_input <- function(
     replacement = paste0(
       "    dm_2v1 dm_3v1 dm_4v1\n",
       "    dm_3v2 dm_4v2 dm_4v3\n\n",
+      
+      "    sbe_c1 sbe_c2 sbe_c3 sbe_c4\n",
+      "    sbm_c1 sbm_c2 sbm_c3 sbm_c4\n",
       "    sdx_c1 sdx_c2 sdx_c3 sdx_c4\n",
       "    sdm_c1 sdm_c2 sdm_c3 sdm_c4\n\n",
+      
+      "    ibe_2v1 ibe_3v1 ibe_4v1\n",
+      "    ibe_3v2 ibe_4v2 ibe_4v3\n",
+      "    ibm_2v1 ibm_3v1 ibm_4v1\n",
+      "    ibm_3v2 ibm_4v2 ibm_4v3\n\n",
+      
       "    idx_2v1 idx_3v1 idx_4v1\n",
-      "    idx_3v2 idx_4v2 idx_4v3\n\n",
+      "    idx_3v2 idx_4v2 idx_4v3\n",
       "    idm_2v1 idm_3v1 idm_4v1\n",
       "    idm_3v2 idm_4v2 idm_4v3\n",
       "  );"
@@ -5631,6 +5664,19 @@ create_class_moderation_lcs_input <- function(
   moderation_constraint_syntax <- paste0(
     moderation_constraint_syntax,
     "\n",
+    
+    "  ! Class-specific moderator effects on baseline externalizing\n\n",
+    "  sbe_c1 = bex_mod;\n",
+    "  sbe_c2 = bex_mod + exi2;\n",
+    "  sbe_c3 = bex_mod + exi3;\n",
+    "  sbe_c4 = bex_mod + exi4;\n\n",
+    
+    "  ! Class-specific moderator effects on baseline emotional problems\n\n",
+    "  sbm_c1 = bem_mod;\n",
+    "  sbm_c2 = bem_mod + emi2;\n",
+    "  sbm_c3 = bem_mod + emi3;\n",
+    "  sbm_c4 = bem_mod + emi4;\n\n",
+    
     "  ! Class-specific moderator effects on externalizing change\n\n",
     "  sdx_c1 = bdx_mod;\n",
     "  sdx_c2 = bdx_mod + dxi2;\n",
@@ -5643,7 +5689,23 @@ create_class_moderation_lcs_input <- function(
     "  sdm_c3 = bdm_mod + dmi3;\n",
     "  sdm_c4 = bdm_mod + dmi4;\n\n",
     
-    "  ! Pairwise differences in externalizing moderation effects\n\n",
+    "  ! Pairwise differences in baseline externalizing moderation\n\n",
+    "  ibe_2v1 = exi2;\n",
+    "  ibe_3v1 = exi3;\n",
+    "  ibe_4v1 = exi4;\n",
+    "  ibe_3v2 = exi3 - exi2;\n",
+    "  ibe_4v2 = exi4 - exi2;\n",
+    "  ibe_4v3 = exi4 - exi3;\n\n",
+    
+    "  ! Pairwise differences in baseline emotional moderation\n\n",
+    "  ibm_2v1 = emi2;\n",
+    "  ibm_3v1 = emi3;\n",
+    "  ibm_4v1 = emi4;\n",
+    "  ibm_3v2 = emi3 - emi2;\n",
+    "  ibm_4v2 = emi4 - emi2;\n",
+    "  ibm_4v3 = emi4 - emi3;\n\n",
+    
+    "  ! Pairwise differences in externalizing-change moderation\n\n",
     "  idx_2v1 = dxi2;\n",
     "  idx_3v1 = dxi3;\n",
     "  idx_4v1 = dxi4;\n",
@@ -5651,7 +5713,7 @@ create_class_moderation_lcs_input <- function(
     "  idx_4v2 = dxi4 - dxi2;\n",
     "  idx_4v3 = dxi4 - dxi3;\n\n",
     
-    "  ! Pairwise differences in emotional moderation effects\n\n",
+    "  ! Pairwise differences in emotional-change moderation\n\n",
     "  idm_2v1 = dmi2;\n",
     "  idm_3v1 = dmi3;\n",
     "  idm_4v1 = dmi4;\n",
@@ -5663,7 +5725,15 @@ create_class_moderation_lcs_input <- function(
   moderation_test_syntax <- paste0(
     "\n",
     "MODEL TEST:\n\n",
-    "  ! Joint six-degree-of-freedom test of moderation\n\n",
+    "  ! Joint 12-degree-of-freedom moderation test\n\n",
+    
+    "  0 = exi2;\n",
+    "  0 = exi3;\n",
+    "  0 = exi4;\n",
+    "  0 = emi2;\n",
+    "  0 = emi3;\n",
+    "  0 = emi4;\n",
+    
     "  0 = dxi2;\n",
     "  0 = dxi3;\n",
     "  0 = dxi4;\n",
@@ -5852,21 +5922,168 @@ OUTPUT:
 }
 
 
-##### DEFINE MODERATION MODEL SETTINGS #####
+#-------------------------------------------------------------------------
+##### M27A-M29C: STEPWISE MODERATION MODELS #####
+#-------------------------------------------------------------------------
 
-outcome_moderation_model_settings <- list(
+##### DEFINE STEPWISE MODERATION SETTINGS FUNCTION #####
+
+create_stepwise_moderation_settings <- function(
+    model_number,
+    moderator,
+    moderator_tag,
+    moderator_description,
+    input_filename,
+    adjustment = c(
+      "minimal",
+      "age_sex",
+      "age_sex_ses"
+    ),
+    technical_covariates = character(),
+    technical_center_predictors =
+      technical_covariates,
+    technical_description = "",
+    extra_notes = ""
+) {
   
-  M27 = list(
-    model_number = 27L,
+  adjustment <- match.arg(
+    adjustment
+  )
+  
+  demographic_covariates <- switch(
+    adjustment,
+    
+    minimal =
+      character(),
+    
+    age_sex = c(
+      "aget2",
+      "sext5"
+    ),
+    
+    age_sex_ses = c(
+      "aget2",
+      "sext5",
+      "sesausb"
+    )
+  )
+  
+  adjustment_description <- switch(
+    adjustment,
+    
+    minimal =
+      "without sociodemographic adjustment",
+    
+    age_sex =
+      "adjusted for baseline age and sex",
+    
+    age_sex_ses = paste(
+      "adjusted for baseline age, sex,",
+      "and maternal educational attainment"
+    )
+  )
+  
+  reporting_role <- switch(
+    adjustment,
+    
+    minimal =
+      "Supplementary unadjusted moderation model",
+    
+    age_sex =
+      "Primary age- and sex-adjusted moderation model",
+    
+    age_sex_ses = paste(
+      "Supplementary fully adjusted",
+      "moderation model"
+    )
+  )
+  
+  covariate_predictors <- unique(
+    c(
+      technical_covariates,
+      demographic_covariates
+    )
+  )
+  
+  center_predictors <- unique(
+    c(
+      technical_center_predictors,
+      demographic_covariates,
+      moderator
+    )
+  )
+  
+  covariate_description <- paste(
+    moderator_description,
+    "included as a grand-mean-centered moderator;",
+    adjustment_description,
+    if (nzchar(technical_description)) {
+      paste0("; ", technical_description)
+    } else {
+      ""
+    }
+  )
+  
+  list(
+    model_number =
+      model_number,
     
     model_name = paste(
-      "Maltreatment-class differences in latent",
-      "psychopathology change moderated by",
-      "European-ancestry MDD polygenic risk"
+      "Maltreatment-class differences in baseline",
+      "psychopathology and latent change moderated by",
+      moderator_description,
+      adjustment_description
     ),
     
     input_filename =
-      "27_sdq_lcs_class_by_prs_eau_moderation_mo.inp",
+      input_filename,
+    
+    moderator =
+      moderator,
+    
+    moderator_tag =
+      moderator_tag,
+    
+    covariate_predictors =
+      covariate_predictors,
+    
+    center_predictors =
+      center_predictors,
+    
+    covariates =
+      covariate_description,
+    
+    model_role = paste(
+      reporting_role,
+      "testing class-by-moderator interactions",
+      "for baseline levels and latent change"
+    ),
+    
+    notes = paste(
+      paste0("M", model_number),
+      "includes moderator main effects and",
+      "class-by-moderator interaction terms for",
+      "EXT2, EMO2, d_ext, and d_emo;",
+      "class 1 is the non-maltreated reference group;",
+      "the moderator is grand-mean centered before",
+      "the interaction terms are calculated;",
+      "MODEL CONSTRAINT provides class-specific",
+      "moderator slopes and all pairwise differences;",
+      "MODEL TEST provides a joint 12-degree-of-freedom",
+      "test of all baseline and change interactions;",
+      extra_notes
+    )
+  )
+}
+
+
+##### DEFINE M27A-M27C PRS MODERATION MODELS #####
+
+outcome_prs_moderation_model_settings <- list(
+  
+  M27a = create_stepwise_moderation_settings(
+    model_number =
+      "27a",
     
     moderator =
       "prs_eau",
@@ -5874,64 +6091,125 @@ outcome_moderation_model_settings <- list(
     moderator_tag =
       "prs",
     
-    covariate_predictors = c(
-      "aget2",
-      "sext5",
-      "sesausb",
+    moderator_description =
+      "European-ancestry MDD polygenic risk",
+    
+    input_filename = paste0(
+      "27a_sdq_lcs_class_by_prs_eau_",
+      "moderation_minimal_mo.inp"
+    ),
+    
+    adjustment =
+      "minimal",
+    
+    technical_covariates = c(
       "PC1",
       "PC2",
       "PC3",
       "PC4"
     ),
     
-    center_predictors = c(
-      "aget2",
-      "sext5",
-      "sesausb",
-      "PC1",
-      "PC2",
-      "PC3",
-      "PC4",
-      "prs_eau"
+    technical_description = paste(
+      "PC1-PC4 included as mandatory",
+      "genetic ancestry covariates"
     ),
     
-    covariates = paste(
-      "Baseline age, sex, maternal educational attainment,",
-      "PC1-PC4, and European-ancestry MDD polygenic risk;",
-      "all predictors grand-mean centered"
-    ),
-    
-    model_role = paste(
-      "Exploratory test of whether European-ancestry",
-      "MDD polygenic risk moderates associations between",
-      "maltreatment class and latent psychopathology change"
-    ),
-    
-    notes = paste(
-      "M27 extends M23a by adding class-by-prs_eau",
-      "interaction terms for d_ext and d_emo;",
-      "class 1 is the non-maltreated reference group;",
-      "prs_eau is grand-mean centered before creating",
-      "the interaction terms;",
-      "PC1-PC4 adjust for genetic ancestry;",
-      "MODEL CONSTRAINT provides class-specific PRS slopes",
-      "and all pairwise differences between slopes;",
-      "MODEL TEST provides a joint six-degree-of-freedom",
-      "test of all PRS moderation parameters"
+    extra_notes = paste(
+      "No sociodemographic covariates are included;",
+      "PC1-PC4 are retained because they are",
+      "technical PRS covariates;",
+      "supplementary model"
     )
   ),
   
-  M28 = list(
-    model_number = 28L,
+  M27b = create_stepwise_moderation_settings(
+    model_number =
+      "27b",
     
-    model_name = paste(
-      "Maltreatment-class differences in latent",
-      "psychopathology change moderated by",
-      "proximal-segment hair cortisol"
+    moderator =
+      "prs_eau",
+    
+    moderator_tag =
+      "prs",
+    
+    moderator_description =
+      "European-ancestry MDD polygenic risk",
+    
+    input_filename = paste0(
+      "27b_sdq_lcs_class_by_prs_eau_",
+      "moderation_age_sex_mo.inp"
     ),
     
-    input_filename =
-      "28_sdq_lcs_class_by_hair_cortisol_moderation_mo.inp",
+    adjustment =
+      "age_sex",
+    
+    technical_covariates = c(
+      "PC1",
+      "PC2",
+      "PC3",
+      "PC4"
+    ),
+    
+    technical_description = paste(
+      "PC1-PC4 included as mandatory",
+      "genetic ancestry covariates"
+    ),
+    
+    extra_notes = paste(
+      "Primary PRS moderation model for reporting;",
+      "adjusted for age, sex, and PC1-PC4"
+    )
+  ),
+  
+  M27c = create_stepwise_moderation_settings(
+    model_number =
+      "27c",
+    
+    moderator =
+      "prs_eau",
+    
+    moderator_tag =
+      "prs",
+    
+    moderator_description =
+      "European-ancestry MDD polygenic risk",
+    
+    input_filename = paste0(
+      "27c_sdq_lcs_class_by_prs_eau_",
+      "moderation_age_sex_ses_mo.inp"
+    ),
+    
+    adjustment =
+      "age_sex_ses",
+    
+    technical_covariates = c(
+      "PC1",
+      "PC2",
+      "PC3",
+      "PC4"
+    ),
+    
+    technical_description = paste(
+      "PC1-PC4 included as mandatory",
+      "genetic ancestry covariates"
+    ),
+    
+    extra_notes = paste(
+      "Fully adjusted supplementary PRS model;",
+      "maternal educational attainment added",
+      "to the primary age- and sex-adjusted model"
+    )
+  )
+)
+
+
+##### DEFINE M28A-M28C HCC MODERATION MODELS #####
+
+outcome_hcc_moderation_model_settings <- list(
+  
+  M28a = create_stepwise_moderation_settings(
+    model_number =
+      "28a",
     
     moderator =
       "c2p1_z",
@@ -5939,55 +6217,87 @@ outcome_moderation_model_settings <- list(
     moderator_tag =
       "hcc",
     
-    covariate_predictors = c(
-      "aget2",
-      "sext5",
-      "sesausb"
+    moderator_description =
+      "standardized proximal-segment hair cortisol",
+    
+    input_filename = paste0(
+      "28a_sdq_lcs_class_by_hair_cortisol_",
+      "moderation_minimal_mo.inp"
     ),
     
-    center_predictors = c(
-      "aget2",
-      "sext5",
-      "sesausb",
-      "c2p1_z"
-    ),
+    adjustment =
+      "minimal",
     
-    covariates = paste(
-      "Baseline age, sex, maternal educational attainment,",
-      "and standardized proximal-segment hair cortisol;",
-      "all predictors grand-mean centered"
-    ),
-    
-    model_role = paste(
-      "Exploratory test of whether proximal-segment",
-      "hair cortisol moderates associations between",
-      "maltreatment class and latent psychopathology change"
-    ),
-    
-    notes = paste(
-      "M28 extends M24 by adding class-by-c2p1_z",
-      "interaction terms for d_ext and d_emo;",
-      "class 1 is the non-maltreated reference group;",
-      "c2p1_z is grand-mean centered before creating",
-      "the interaction terms;",
-      "MODEL CONSTRAINT provides class-specific HCC slopes",
-      "and all pairwise differences between slopes;",
-      "MODEL TEST provides a joint six-degree-of-freedom",
-      "test of all HCC moderation parameters"
+    extra_notes = paste(
+      "No sociodemographic covariates are included;",
+      "supplementary model"
     )
   ),
   
-  M29 = list(
-    model_number = 29L,
+  M28b = create_stepwise_moderation_settings(
+    model_number =
+      "28b",
     
-    model_name = paste(
-      "Maltreatment-class differences in latent",
-      "psychopathology change moderated by",
-      "prior psychiatric diagnosis"
+    moderator =
+      "c2p1_z",
+    
+    moderator_tag =
+      "hcc",
+    
+    moderator_description =
+      "standardized proximal-segment hair cortisol",
+    
+    input_filename = paste0(
+      "28b_sdq_lcs_class_by_hair_cortisol_",
+      "moderation_age_sex_mo.inp"
     ),
     
-    input_filename =
-      "29_sdq_lcs_class_by_diagnosis_moderation_mo.inp",
+    adjustment =
+      "age_sex",
+    
+    extra_notes = paste(
+      "Primary HCC moderation model for reporting;",
+      "adjusted for age and sex"
+    )
+  ),
+  
+  M28c = create_stepwise_moderation_settings(
+    model_number =
+      "28c",
+    
+    moderator =
+      "c2p1_z",
+    
+    moderator_tag =
+      "hcc",
+    
+    moderator_description =
+      "standardized proximal-segment hair cortisol",
+    
+    input_filename = paste0(
+      "28c_sdq_lcs_class_by_hair_cortisol_",
+      "moderation_age_sex_ses_mo.inp"
+    ),
+    
+    adjustment =
+      "age_sex_ses",
+    
+    extra_notes = paste(
+      "Fully adjusted supplementary HCC model;",
+      "maternal educational attainment added",
+      "to the primary age- and sex-adjusted model"
+    )
+  )
+)
+
+
+##### DEFINE M29A-M29C DIAGNOSIS MODERATION MODELS #####
+
+outcome_diagnosis_moderation_model_settings <- list(
+  
+  M29a = create_stepwise_moderation_settings(
+    model_number =
+      "29a",
     
     moderator =
       "diag_vor",
@@ -5995,57 +6305,110 @@ outcome_moderation_model_settings <- list(
     moderator_tag =
       "diag",
     
-    covariate_predictors = c(
-      "aget2",
-      "sext5",
-      "sesausb"
+    moderator_description =
+      "prior psychiatric diagnosis",
+    
+    input_filename = paste0(
+      "29a_sdq_lcs_class_by_diagnosis_",
+      "moderation_minimal_mo.inp"
     ),
     
-    center_predictors = c(
-      "aget2",
-      "sext5",
-      "sesausb"
+    adjustment =
+      "minimal",
+    
+    extra_notes = paste(
+      "No sociodemographic covariates are included;",
+      "diag_vor is grand-mean centered to improve",
+      "numerical conditioning;",
+      "the condition number and the parameter",
+      "D_EMO ON I4DIAG must be checked;",
+      "supplementary model"
+    )
+  ),
+  
+  M29b = create_stepwise_moderation_settings(
+    model_number =
+      "29b",
+    
+    moderator =
+      "diag_vor",
+    
+    moderator_tag =
+      "diag",
+    
+    moderator_description =
+      "prior psychiatric diagnosis",
+    
+    input_filename = paste0(
+      "29b_sdq_lcs_class_by_diagnosis_",
+      "moderation_age_sex_mo.inp"
     ),
     
-    covariates = paste(
-      "Baseline age, sex, maternal educational attainment,",
-      "and prior psychiatric diagnosis;",
-      "sociodemographic covariates grand-mean centered;",
-      "binary diagnosis variable retained in its original",
-      "zero-versus-one coding"
+    adjustment =
+      "age_sex",
+    
+    extra_notes = paste(
+      "Primary diagnosis moderation model for reporting;",
+      "diag_vor is grand-mean centered to improve",
+      "numerical conditioning;",
+      "the condition number and the parameter",
+      "D_EMO ON I4DIAG must be checked"
+    )
+  ),
+  
+  M29c = create_stepwise_moderation_settings(
+    model_number =
+      "29c",
+    
+    moderator =
+      "diag_vor",
+    
+    moderator_tag =
+      "diag",
+    
+    moderator_description =
+      "prior psychiatric diagnosis",
+    
+    input_filename = paste0(
+      "29c_sdq_lcs_class_by_diagnosis_",
+      "moderation_age_sex_ses_mo.inp"
     ),
     
-    model_role = paste(
-      "Exploratory test of whether prior psychiatric",
-      "diagnosis moderates associations between",
-      "maltreatment class and latent psychopathology change"
-    ),
+    adjustment =
+      "age_sex_ses",
     
-    notes = paste(
-      "M29 extends M22 by adding diag_vor and",
-      "class-by-diagnosis interaction terms for",
-      "d_ext and d_emo;",
-      "class 1 is the non-maltreated reference group;",
-      "diag_vor is not centered, so class main effects",
-      "refer to participants without a prior diagnosis;",
-      "class-specific diagnosis slopes represent the",
-      "difference between diagnosis groups within each class;",
-      "MODEL TEST provides a joint six-degree-of-freedom",
-      "test of all diagnosis moderation parameters"
+    extra_notes = paste(
+      "Fully adjusted supplementary diagnosis model;",
+      "diag_vor is grand-mean centered to improve",
+      "numerical conditioning;",
+      "maternal educational attainment added",
+      "to the primary age- and sex-adjusted model;",
+      "the condition number and the parameter",
+      "D_EMO ON I4DIAG must be checked"
     )
   )
 )
 
 
-##### ADD M27-M29 TO COMMON MODEL SETTINGS #####
+##### COMBINE M27A-M29C MODERATION SETTINGS #####
 
-outcome_model_settings <- c(
-  outcome_model_settings,
-  outcome_moderation_model_settings
+outcome_moderation_model_settings <- c(
+  outcome_prs_moderation_model_settings,
+  outcome_hcc_moderation_model_settings,
+  outcome_diagnosis_moderation_model_settings
 )
 
 
-##### CREATE M27-M29 INPUTS #####
+##### ADD M27A-M29C TO COMMON MODEL SETTINGS #####
+
+outcome_model_settings[
+  names(
+    outcome_moderation_model_settings
+  )
+] <- outcome_moderation_model_settings
+
+
+##### CREATE M27A-M29C INPUTS #####
 
 outcome_moderation_model_files <- lapply(
   outcome_moderation_model_settings,
@@ -6065,17 +6428,38 @@ outcome_moderation_input_files <- unname(
   )
 )
 
-input_file_m27 <-
-  outcome_moderation_model_files$M27
 
-input_file_m28 <-
-  outcome_moderation_model_files$M28
+##### DEFINE INDIVIDUAL M27A-M29C INPUT OBJECTS #####
 
-input_file_m29 <-
-  outcome_moderation_model_files$M29
+input_file_m27a <-
+  outcome_moderation_model_files$M27a
+
+input_file_m27b <-
+  outcome_moderation_model_files$M27b
+
+input_file_m27c <-
+  outcome_moderation_model_files$M27c
+
+input_file_m28a <-
+  outcome_moderation_model_files$M28a
+
+input_file_m28b <-
+  outcome_moderation_model_files$M28b
+
+input_file_m28c <-
+  outcome_moderation_model_files$M28c
+
+input_file_m29a <-
+  outcome_moderation_model_files$M29a
+
+input_file_m29b <-
+  outcome_moderation_model_files$M29b
+
+input_file_m29c <-
+  outcome_moderation_model_files$M29c
 
 
-##### CHECK M27-M29 INPUTS #####
+##### CHECK M27A-M29C INPUTS #####
 
 missing_moderation_input_files <-
   outcome_moderation_input_files[
@@ -6095,7 +6479,7 @@ if (length(missing_moderation_input_files) > 0L) {
 }
 
 
-##### RUN M27-M29 #####
+##### RUN M27A-M29C #####
 
 if (isTRUE(run_mplus_models)) {
   
@@ -6110,18 +6494,27 @@ if (isTRUE(run_mplus_models)) {
   }
   
   MplusAutomation::runModels(
-    target = outcome_moderation_input_files,
-    replaceOutfile = "always",
-    showOutput = FALSE,
-    logFile = NULL,
-    quiet = FALSE
+    target =
+      outcome_moderation_input_files,
+    
+    replaceOutfile =
+      "always",
+    
+    showOutput =
+      FALSE,
+    
+    logFile =
+      NULL,
+    
+    quiet =
+      FALSE
   )
   
 } else {
   
   message(
     paste(
-      "M27-M29 moderation inputs were created,",
+      "M27a-M29c moderation inputs were created,",
       "but Mplus execution was skipped."
     )
   )
