@@ -5522,15 +5522,23 @@ create_class_moderation_lcs_input <- function(
     collapse = "\n"
   )
 
-  useobservations_conditions <- c(
-    "(stat_t5 NE 0)",
-    "(mo_cls GE 1)",
-    "(mo_cls LE 4)",
+  complete_case_conditions <- if (
+    length(required_complete_variables) == 0L
+  ) {
+    character()
+  } else {
     paste0(
       "(",
       required_complete_variables,
       " NE -999)"
     )
+  }
+
+  useobservations_conditions <- c(
+    "(stat_t5 NE 0)",
+    "(mo_cls GE 1)",
+    "(mo_cls LE 4)",
+    complete_case_conditions
   )
 
   useobservations_syntax <- paste(
@@ -5927,6 +5935,7 @@ OUTPUT:
   STANDARDIZED
   CINTERVAL
   TECH1
+  TECH3
   TECH4;
 "
   )
@@ -6095,18 +6104,27 @@ create_stepwise_moderation_settings <- function(
       ""
     }
   )
+
+  model_name <- paste(
+    "Maltreatment-class differences in baseline",
+    "psychopathology and latent change moderated by",
+    moderator_description,
+    adjustment_description
+  )
+
+  if (nzchar(sample_description)) {
+    model_name <- paste0(
+      model_name,
+      ", ",
+      sample_description
+    )
+  }
   
   list(
     model_number =
       model_number,
     
-    model_name = paste(
-      "Maltreatment-class differences in baseline",
-      "psychopathology and latent change moderated by",
-      moderator_description,
-      adjustment_description,
-      sample_description
-    ),
+    model_name = model_name,
     
     input_filename =
       input_filename,
