@@ -6675,3 +6675,257 @@ if (isTRUE(run_moderation_models)) {
     )
   )
 }
+
+
+#-------------------------------------------------------------------------
+##### SYNC CURRENT REGISTERED MPLUS MODELS TO SEADRIVE #####
+#-------------------------------------------------------------------------
+
+# Copy only model inputs registered by this script and any matching outputs
+# currently available in the local Mplus working directory. The repository
+# folder structure below Mplus/ is preserved in the SeaDrive results folder.
+# No data files are copied, and no files are deleted from the destination.
+
+sync_registered_mplus_models <- function(
+    registry_file = model_registry_file,
+    repository_mplus_dir = github_mplus_dir,
+    local_mplus_dir = mplus_input_dir,
+    seadrive_mplus_dir = file.path(results_dir, "Mplus")
+) {
+  if (!file.exists(registry_file)) {
+    stop(
+      "The Mplus model registry does not exist: ",
+      registry_file
+    )
+  }
+
+  # Do not create a new parallel SeaDrive tree if the configured mount or
+  # results directory is unavailable.
+  if (!dir.exists(seadrive_mplus_dir)) {
+    stop(
+      "The configured SeaDrive Mplus results directory is unavailable: ",
+      seadrive_mplus_dir
+    )
+  }
+
+  model_registry <- utils::read.csv(
+    registry_file,
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+
+  required_registry_columns <- c(
+    "model_id",
+    "input_file"
+  )
+
+  if (!all(required_registry_columns %in% names(model_registry))) {
+    stop(
+      "The Mplus model registry must contain: ",
+      paste(required_registry_columns, collapse = ", ")
+    )
+  }
+
+  if (
+    nrow(model_registry) < 1L ||
+    anyNA(model_registry$model_id) ||
+    anyNA(model_registry$input_file) ||
+    any(!nzchar(model_registry$model_id)) ||
+    any(!nzchar(model_registry$input_file)) ||
+    anyDuplicated(model_registry$model_id) > 0L ||
+    anyDuplicated(tolower(model_registry$input_file)) > 0L
+  ) {
+    stop(
+      "The Mplus model registry contains missing or duplicated model entries."
+    )
+  }
+
+  repository_input_files <- list.files(
+    repository_mplus_dir,
+    pattern = "\\.inp$",
+    recursive = TRUE,
+    full.names = TRUE,
+    ignore.case = TRUE
+  )
+
+  resolve_registered_input <- function(input_filename) {
+    matching_files <- repository_input_files[
+      tolower(basename(repository_input_files)) ==
+        tolower(input_filename)
+    ]
+
+    if (length(matching_files) != 1L) {
+      stop(
+        "Registered input could not be resolved uniquely: ",
+        input_filename
+      )
+    }
+
+    matching_files
+  }
+
+  registered_input_files <- vapply(
+    model_registry$input_file,
+    resolve_registered_input,
+    character(1)
+  )
+
+  normalized_repository_dir <- normalizePath(
+    repository_mplus_dir,
+    winslash = "/",
+    mustWork = TRUE
+  )
+
+  normalized_input_files <- normalizePath(
+    registered_input_files,
+    winslash = "/",
+    mustWork = TRUE
+  )
+
+  expected_path_prefix <- paste0(
+    normalized_repository_dir,
+    "/"
+  )
+
+  if (!all(startsWith(normalized_input_files, expected_path_prefix))) {
+    stop(
+      "At least one registered Mplus input is outside the repository Mplus directory."
+    )
+  }
+
+  relative_input_files <- substring(
+    normalized_input_files,
+    nchar(expected_path_prefix) + 1L
+  )
+
+  destination_input_files <- file.path(
+    seadrive_mplus_dir,
+    relative_input_files
+  )
+
+  destination_directories <- unique(
+    dirname(destination_input_files)
+  )
+
+  invisible(
+    lapply(
+      destination_directories,
+      dir.create,
+      recursive = TRUE,
+      showWarnings = FALSE
+    )
+  )
+
+  input_copy_ok <- file.copy(
+    from = registered_input_files,
+    to = destination_input_files,
+    overwrite = TRUE,
+    copy.date = TRUE
+  )
+
+  if (!all(input_copy_ok)) {
+    stop(
+      "Failed to copy registered Mplus input files to SeaDrive:\n",
+      paste(
+        registered_input_files[!input_copy_ok],
+        collapse = "\n"
+      )
+    )
+  }
+
+  local_output_files <- file.path(
+    local_mplus_dir,
+    paste0(
+      tools::file_path_sans_ext(
+        basename(registered_input_files)
+      ),
+      ".out"
+    )
+  )
+
+  available_output_files <- file.exists(
+    local_output_files
+  )
+
+  destination_output_files <- file.path(
+    dirname(destination_input_files),
+    basename(local_output_files)
+  )
+
+  output_copy_ok <- rep(
+    TRUE,
+    length(local_output_files)
+  )
+
+  if (any(available_output_files)) {
+    output_copy_ok[available_output_files] <- file.copy(
+      from = local_output_files[available_output_files],
+      to = destination_output_files[available_output_files],
+      overwrite = TRUE,
+      copy.date = TRUE
+    )
+  }
+
+  if (!all(output_copy_ok)) {
+    stop(
+      "Failed to copy available Mplus output files to SeaDrive:\n",
+      paste(
+        local_output_files[!output_copy_ok],
+        collapse = "\n"
+      )
+    )
+  }
+
+  registry_destination <- file.path(
+    seadrive_mplus_dir,
+    basename(registry_file)
+  )
+
+  if (!file.copy(
+    from = registry_file,
+    to = registry_destination,
+    overwrite = TRUE,
+    copy.date = TRUE
+  )) {
+    stop(
+      "Failed to copy the Mplus model registry to SeaDrive."
+    )
+  }
+
+  missing_output_ids <- model_registry$model_id[
+    !available_output_files
+  ]
+
+  message(
+    "SeaDrive Mplus sync completed: ",
+    length(registered_input_files),
+    " input files and ",
+    sum(available_output_files),
+    " output files copied to ",
+    seadrive_mplus_dir,
+    "."
+  )
+
+  if (length(missing_output_ids) > 0L) {
+    message(
+      "No local .out file was available for: ",
+      paste(missing_output_ids, collapse = ", "),
+      "."
+    )
+  }
+
+  invisible(
+    data.frame(
+      model_id = model_registry$model_id,
+      input_source = registered_input_files,
+      input_destination = destination_input_files,
+      output_source = local_output_files,
+      output_destination = destination_output_files,
+      output_available = available_output_files,
+      stringsAsFactors = FALSE
+    )
+  )
+}
+
+
+seadrive_mplus_sync <- sync_registered_mplus_models()
