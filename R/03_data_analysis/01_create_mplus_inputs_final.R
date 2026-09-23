@@ -5410,7 +5410,8 @@ create_class_moderation_lcs_input <- function(
     center_predictors,
     covariates,
     model_role,
-    notes = ""
+    notes = "",
+    required_complete_variables = character()
 ) {
   
   stopifnot(
@@ -5424,7 +5425,10 @@ create_class_moderation_lcs_input <- function(
     length(moderator_tag) == 1L,
     nzchar(moderator_tag),
     length(covariates) == 1L,
-    length(model_role) == 1L
+    length(model_role) == 1L,
+    is.character(required_complete_variables),
+    !anyNA(required_complete_variables),
+    all(nzchar(required_complete_variables))
   )
   
   additional_predictors <- unique(
@@ -5436,6 +5440,10 @@ create_class_moderation_lcs_input <- function(
   
   center_predictors <- unique(
     center_predictors
+  )
+
+  required_complete_variables <- unique(
+    required_complete_variables
   )
   
   predictors_not_in_model <- center_predictors[
@@ -5469,6 +5477,22 @@ create_class_moderation_lcs_input <- function(
       )
     )
   }
+
+  missing_filter_variables <- required_complete_variables[
+    !toupper(required_complete_variables) %in%
+      toupper(outcome_mplus_names)
+  ]
+
+  if (length(missing_filter_variables) > 0L) {
+    stop(
+      "The following complete-case filter variables are missing ",
+      "from the final Mplus dataset:\n",
+      paste(
+        missing_filter_variables,
+        collapse = "\n"
+      )
+    )
+  }
   
   interaction_variables <- paste0(
     "i",
@@ -5496,6 +5520,25 @@ create_class_moderation_lcs_input <- function(
       max_width = 88
     ),
     collapse = "\n"
+  )
+
+  useobservations_conditions <- c(
+    "(stat_t5 NE 0)",
+    "(mo_cls GE 1)",
+    "(mo_cls LE 4)",
+    paste0(
+      "(",
+      required_complete_variables,
+      " NE -999)"
+    )
+  )
+
+  useobservations_syntax <- paste(
+    paste0(
+      "    ",
+      useobservations_conditions
+    ),
+    collapse = " AND\n"
   )
   
   center_predictor_syntax <- if (
@@ -5763,6 +5806,23 @@ create_class_moderation_lcs_input <- function(
     ),
     ";"
   )
+
+  sample_description <- paste(
+    "Participants with stat_t5 NE 0, valid",
+    "four-group maltreatment classification, and",
+    "available moderator and covariate data"
+  )
+
+  if (length(required_complete_variables) > 0L) {
+    sample_description <- paste(
+      sample_description,
+      "and complete data for",
+      paste(
+        required_complete_variables,
+        collapse = ", "
+      )
+    )
+  }
   
   input_syntax <- paste0(
     "TITLE:
@@ -5781,9 +5841,7 @@ VARIABLE:
     ;
 
   USEOBSERVATIONS =
-    (stat_t5 NE 0) AND
-    (mo_cls GE 1) AND
-    (mo_cls LE 4);
+", useobservations_syntax, ";
 
   IDVARIABLE = SIC_N;
 
@@ -5889,11 +5947,7 @@ OUTPUT:
       script =
         "01_create_mplus_inputs_final.R",
       
-      sample = paste(
-        "Participants with stat_t5 NE 0, valid",
-        "four-group maltreatment classification, and",
-        "available moderator and covariate data"
-      ),
+      sample = sample_description,
       
       estimator = "MLR",
       
@@ -5923,7 +5977,7 @@ OUTPUT:
 
 
 #-------------------------------------------------------------------------
-##### M27A-M29C: STEPWISE MODERATION MODELS #####
+##### M27A-M29C: STEPWISE MODERATION MODELS AND M29B_CC #####
 #-------------------------------------------------------------------------
 
 ##### DEFINE STEPWISE MODERATION SETTINGS FUNCTION #####
@@ -5943,6 +5997,9 @@ create_stepwise_moderation_settings <- function(
     technical_center_predictors =
       technical_covariates,
     technical_description = "",
+    required_complete_variables = character(),
+    sample_description = "",
+    reporting_role_override = NULL,
     extra_notes = ""
 ) {
   
@@ -5997,6 +6054,16 @@ create_stepwise_moderation_settings <- function(
       "moderation model"
     )
   )
+
+  if (!is.null(reporting_role_override)) {
+    stopifnot(
+      length(reporting_role_override) == 1L,
+      !is.na(reporting_role_override),
+      nzchar(reporting_role_override)
+    )
+
+    reporting_role <- reporting_role_override
+  }
   
   covariate_predictors <- unique(
     c(
@@ -6021,6 +6088,11 @@ create_stepwise_moderation_settings <- function(
       paste0("; ", technical_description)
     } else {
       ""
+    },
+    if (nzchar(sample_description)) {
+      paste0("; ", sample_description)
+    } else {
+      ""
     }
   )
   
@@ -6032,7 +6104,8 @@ create_stepwise_moderation_settings <- function(
       "Maltreatment-class differences in baseline",
       "psychopathology and latent change moderated by",
       moderator_description,
-      adjustment_description
+      adjustment_description,
+      sample_description
     ),
     
     input_filename =
@@ -6049,6 +6122,9 @@ create_stepwise_moderation_settings <- function(
     
     center_predictors =
       center_predictors,
+
+    required_complete_variables =
+      required_complete_variables,
     
     covariates =
       covariate_description,
@@ -6291,7 +6367,7 @@ outcome_hcc_moderation_model_settings <- list(
 )
 
 
-##### DEFINE M29A-M29C DIAGNOSIS MODERATION MODELS #####
+##### DEFINE M29A-M29C AND M29B_CC DIAGNOSIS MODERATION MODELS #####
 
 outcome_diagnosis_moderation_model_settings <- list(
   
@@ -6355,6 +6431,51 @@ outcome_diagnosis_moderation_model_settings <- list(
       "D_EMO ON I4DIAG must be checked"
     )
   ),
+
+  M29b_cc = create_stepwise_moderation_settings(
+    model_number =
+      "29b_cc",
+
+    moderator =
+      "diag_vor",
+
+    moderator_tag =
+      "diag",
+
+    moderator_description =
+      "prior psychiatric diagnosis",
+
+    input_filename = paste0(
+      "29b_cc_sdq_lcs_class_by_diagnosis_",
+      "moderation_age_sex_ses_complete_sample_mo.inp"
+    ),
+
+    adjustment =
+      "age_sex",
+
+    required_complete_variables =
+      "sesausb",
+
+    sample_description = paste(
+      "restricted to the maternal-education-complete",
+      "sample used by M29c"
+    ),
+
+    reporting_role_override = paste(
+      "Diagnostic complete-case moderation model",
+      "for separating the sample-restriction effect",
+      "from SES adjustment"
+    ),
+
+    extra_notes = paste(
+      "Age- and sex-adjusted diagnosis moderation model;",
+      "restricted to nonmissing sesausb solely through",
+      "USEOBSERVATIONS; sesausb is not included as a predictor;",
+      "expected analytical N = 512;",
+      "the condition number, covariance-coverage warnings,",
+      "and D_EMO ON I4DIAG must be checked"
+    )
+  ),
   
   M29c = create_stepwise_moderation_settings(
     model_number =
@@ -6390,7 +6511,7 @@ outcome_diagnosis_moderation_model_settings <- list(
 )
 
 
-##### COMBINE M27A-M29C MODERATION SETTINGS #####
+##### COMBINE MODERATION SETTINGS #####
 
 outcome_moderation_model_settings <- c(
   outcome_prs_moderation_model_settings,
@@ -6399,7 +6520,7 @@ outcome_moderation_model_settings <- c(
 )
 
 
-##### ADD M27A-M29C TO COMMON MODEL SETTINGS #####
+##### ADD MODERATION MODELS TO COMMON MODEL SETTINGS #####
 
 outcome_model_settings[
   names(
@@ -6408,7 +6529,7 @@ outcome_model_settings[
 ] <- outcome_moderation_model_settings
 
 
-##### CREATE M27A-M29C INPUTS #####
+##### CREATE MODERATION INPUTS #####
 
 outcome_moderation_model_files <- lapply(
   outcome_moderation_model_settings,
@@ -6429,7 +6550,7 @@ outcome_moderation_input_files <- unname(
 )
 
 
-##### DEFINE INDIVIDUAL M27A-M29C INPUT OBJECTS #####
+##### DEFINE INDIVIDUAL MODERATION INPUT OBJECTS #####
 
 input_file_m27a <-
   outcome_moderation_model_files$M27a
@@ -6455,11 +6576,14 @@ input_file_m29a <-
 input_file_m29b <-
   outcome_moderation_model_files$M29b
 
+input_file_m29b_cc <-
+  outcome_moderation_model_files$M29b_cc
+
 input_file_m29c <-
   outcome_moderation_model_files$M29c
 
 
-##### CHECK M27A-M29C INPUTS #####
+##### CHECK MODERATION INPUTS #####
 
 missing_moderation_input_files <-
   outcome_moderation_input_files[
@@ -6479,9 +6603,41 @@ if (length(missing_moderation_input_files) > 0L) {
 }
 
 
-##### RUN M27A-M29C #####
+##### SELECT MODERATION MODELS TO RUN #####
 
-if (isTRUE(run_mplus_models)) {
+run_moderation_models <- FALSE
+
+moderation_model_ids_to_run <-
+  "M29b_cc"
+
+unknown_moderation_model_ids <- setdiff(
+  moderation_model_ids_to_run,
+  names(outcome_moderation_model_files)
+)
+
+if (length(unknown_moderation_model_ids) > 0L) {
+  stop(
+    "Unknown moderation model IDs requested for execution:\n",
+    paste(
+      unknown_moderation_model_ids,
+      collapse = "\n"
+    )
+  )
+}
+
+selected_moderation_input_files <- unname(
+  unlist(
+    outcome_moderation_model_files[
+      moderation_model_ids_to_run
+    ],
+    use.names = FALSE
+  )
+)
+
+
+##### RUN SELECTED MODERATION MODELS #####
+
+if (isTRUE(run_moderation_models)) {
   
   if (
     MplusAutomation::mplusAvailable(
@@ -6495,10 +6651,10 @@ if (isTRUE(run_mplus_models)) {
   
   MplusAutomation::runModels(
     target =
-      outcome_moderation_input_files,
+      selected_moderation_input_files,
     
     replaceOutfile =
-      "always",
+      "never",
     
     showOutput =
       FALSE,
@@ -6514,8 +6670,8 @@ if (isTRUE(run_mplus_models)) {
   
   message(
     paste(
-      "M27a-M29c moderation inputs were created,",
-      "but Mplus execution was skipped."
+      "Moderation inputs were created,",
+      "including M29b_cc, but Mplus execution was skipped."
     )
   )
 }
