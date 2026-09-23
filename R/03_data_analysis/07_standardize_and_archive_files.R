@@ -10,7 +10,10 @@ source(
   "C:/Users/keil/Documents/main_outcome_amis2/R/03_data_analysis/00_setup_standardized.R"
 )
 
-DRY_RUN <- FALSE
+# This script contains the superseded pre-registry file layout. Keep it in
+# dry-run mode; current registered models are synchronized at the end of
+# 01_create_mplus_inputs_final.R.
+DRY_RUN <- TRUE
 CREATE_LOCAL_SNAPSHOT <- FALSE
 snapshot_stamp <- format(Sys.time(), "%Y-%m-%d_%H%M")
 local_snapshot_dir <- file.path(mplus_local_archive_dir, snapshot_stamp)

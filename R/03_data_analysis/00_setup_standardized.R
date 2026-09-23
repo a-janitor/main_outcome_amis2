@@ -309,16 +309,10 @@ output_directories <- c(
   mplus_results_dir_invariance,
   mplus_results_dir_lcs,
   mplus_results_dir_maltreatment,
-  mplus_results_dir_biology,
-  mplus_results_sensitivity_dir,
-  mplus_results_inputs_dir,
-  mplus_results_outputs_dir,
   man_table_dir,
   man_figure_dir,
   supplement_dir,
   mplus_local_archive_dir,
-  m18b_class_checks_dir_mo,
-  m18b_lcs_results_dir_mo,
   github_m18b_class_description_dir_mo,
   github_m18b_lcs_dir_mo
 )
