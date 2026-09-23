@@ -2953,3 +2953,604 @@ if (interactive()) {
 }
 
 
+#-------------------------------------------------------------------------
+##### TABLE SX: MODERATION OF BASELINE LEVELS AND LATENT CHANGE ####
+#-------------------------------------------------------------------------
+
+moderation_model_catalog <- tibble::tribble(
+  ~model_id, ~model_order, ~output_stem, ~moderator,
+  ~adjustment, ~sample_filter, ~covariates, ~analysis_role,
+  ~primary_model,
+
+  "M27a", 1L,
+  "27a_sdq_lcs_class_by_prs_eau_moderation_minimal_mo",
+  "PRS-EAU",
+  "Minimal",
+  paste(
+    "Longitudinal SDQ sample with valid four-group maltreatment",
+    "classification and complete PRS/covariate data"
+  ),
+  "Genetic ancestry components 1-4",
+  "Minimally adjusted sensitivity analysis",
+  FALSE,
+
+  "M27b", 2L,
+  "27b_sdq_lcs_class_by_prs_eau_moderation_age_sex_mo",
+  "PRS-EAU",
+  "Age and sex adjusted",
+  paste(
+    "Longitudinal SDQ sample with valid four-group maltreatment",
+    "classification and complete PRS/covariate data"
+  ),
+  "Baseline age, sex, and genetic ancestry components 1-4",
+  "Primary analysis",
+  TRUE,
+
+  "M27c", 3L,
+  "27c_sdq_lcs_class_by_prs_eau_moderation_age_sex_ses_mo",
+  "PRS-EAU",
+  "Age, sex, and SES adjusted",
+  paste(
+    "Longitudinal SDQ sample with valid four-group maltreatment",
+    "classification and complete PRS/covariate data"
+  ),
+  paste(
+    "Baseline age, sex, maternal educational attainment,",
+    "and genetic ancestry components 1-4"
+  ),
+  "SES-adjusted sensitivity analysis",
+  FALSE,
+
+  "M28a", 4L,
+  "28a_sdq_lcs_class_by_hair_cortisol_moderation_minimal_mo",
+  "Hair cortisol concentration",
+  "Minimal",
+  paste(
+    "Longitudinal SDQ sample with valid four-group maltreatment",
+    "classification and complete hair-cortisol data"
+  ),
+  "None",
+  "Minimally adjusted sensitivity analysis",
+  FALSE,
+
+  "M28b", 5L,
+  "28b_sdq_lcs_class_by_hair_cortisol_moderation_age_sex_mo",
+  "Hair cortisol concentration",
+  "Age and sex adjusted",
+  paste(
+    "Longitudinal SDQ sample with valid four-group maltreatment",
+    "classification and complete hair-cortisol/covariate data"
+  ),
+  "Baseline age and sex",
+  "Primary analysis",
+  TRUE,
+
+  "M28c", 6L,
+  "28c_sdq_lcs_class_by_hair_cortisol_moderation_age_sex_ses_mo",
+  "Hair cortisol concentration",
+  "Age, sex, and SES adjusted",
+  paste(
+    "Longitudinal SDQ sample with valid four-group maltreatment",
+    "classification and complete hair-cortisol/covariate data"
+  ),
+  "Baseline age, sex, and maternal educational attainment",
+  "SES-adjusted sensitivity analysis",
+  FALSE,
+
+  "M29a", 7L,
+  "29a_sdq_lcs_class_by_diagnosis_moderation_minimal_mo",
+  "Prior psychiatric diagnosis",
+  "Minimal",
+  paste(
+    "Longitudinal SDQ sample with valid four-group maltreatment",
+    "classification and available diagnosis data"
+  ),
+  "None",
+  "Minimally adjusted sensitivity analysis",
+  FALSE,
+
+  "M29b", 8L,
+  "29b_sdq_lcs_class_by_diagnosis_moderation_age_sex_mo",
+  "Prior psychiatric diagnosis",
+  "Age and sex adjusted",
+  paste(
+    "Longitudinal SDQ sample with valid four-group maltreatment",
+    "classification and complete diagnosis/covariate data"
+  ),
+  "Baseline age and sex",
+  "Primary analysis",
+  TRUE,
+
+  "M29b_cc", 9L,
+  paste0(
+    "29b_cc_sdq_lcs_class_by_diagnosis_moderation_",
+    "age_sex_ses_complete_sample_mo"
+  ),
+  "Prior psychiatric diagnosis",
+  "Age and sex adjusted; SES-complete sample",
+  paste(
+    "M29c SES-complete sample; SES used only to define the sample,",
+    "not as a predictor"
+  ),
+  "Baseline age and sex",
+  "Complete-case diagnostic sensitivity analysis",
+  FALSE,
+
+  "M29c", 10L,
+  "29c_sdq_lcs_class_by_diagnosis_moderation_age_sex_ses_mo",
+  "Prior psychiatric diagnosis",
+  "Age, sex, and SES adjusted",
+  paste(
+    "Longitudinal SDQ sample with valid four-group maltreatment",
+    "classification and complete diagnosis/covariate data"
+  ),
+  "Baseline age, sex, and maternal educational attainment",
+  "SES-adjusted sensitivity analysis",
+  FALSE
+) |>
+  dplyr::mutate(
+    output_file = file.path(
+      mplus_input_dir,
+      paste0(
+        .data$output_stem,
+        ".out"
+      )
+    )
+  )
+
+
+##### VERIFY AND EXTRACT ALL MODERATION OUTPUTS #####
+
+missing_moderation_outputs <- moderation_model_catalog |>
+  dplyr::filter(
+    !file.exists(
+      .data$output_file
+    )
+  )
+
+if (nrow(missing_moderation_outputs) > 0L) {
+  stop(
+    "The following moderation outputs are missing:\n",
+    paste(
+      missing_moderation_outputs$output_file,
+      collapse = "\n"
+    )
+  )
+}
+
+moderation_extractions <- purrr::pmap(
+  moderation_model_catalog,
+  function(
+    model_id,
+    model_order,
+    output_stem,
+    moderator,
+    adjustment,
+    sample_filter,
+    covariates,
+    analysis_role,
+    primary_model,
+    output_file
+  ) {
+    extract_moderation_model_results(
+      output_file = output_file,
+      model_id = model_id,
+      moderator = moderator,
+      adjustment = adjustment,
+      sample_filter = sample_filter,
+      covariates = covariates,
+      analysis_role = analysis_role
+    )
+  }
+)
+
+moderation_model_results <- dplyr::bind_rows(
+  lapply(
+    moderation_extractions,
+    `[[`,
+    "model"
+  )
+)
+
+moderation_separate_tests <- dplyr::bind_rows(
+  lapply(
+    moderation_extractions,
+    `[[`,
+    "separate_tests"
+  )
+)
+
+moderation_simple_slopes <- dplyr::bind_rows(
+  lapply(
+    moderation_extractions,
+    `[[`,
+    "simple_slopes"
+  )
+)
+
+moderation_class_contrasts <- dplyr::bind_rows(
+  lapply(
+    moderation_extractions,
+    `[[`,
+    "class_contrasts"
+  )
+)
+
+stopifnot(
+  nrow(moderation_model_results) == 10L,
+  nrow(moderation_separate_tests) == 40L,
+  nrow(moderation_simple_slopes) == 160L,
+  nrow(moderation_class_contrasts) == 240L,
+  all(moderation_model_results$normal_termination),
+  all(moderation_model_results$global_df == 12L),
+  all(moderation_separate_tests$df == 3L),
+  !anyNA(moderation_separate_tests$chi_square),
+  !anyNA(moderation_separate_tests$p_value)
+)
+
+
+##### CREATE COMPLETE MODEL INVENTORY #####
+
+moderation_tests_wide <- moderation_separate_tests |>
+  dplyr::select(
+    model_id,
+    test_id,
+    chi_square,
+    p_value
+  ) |>
+  tidyr::pivot_wider(
+    names_from = test_id,
+    values_from = c(
+      chi_square,
+      p_value
+    ),
+    names_glue = "{test_id}_{.value}"
+  )
+
+moderation_model_inventory <- moderation_model_catalog |>
+  dplyr::select(
+    model_id,
+    model_order,
+    output_stem,
+    primary_model
+  ) |>
+  dplyr::left_join(
+    moderation_model_results,
+    by = "model_id"
+  ) |>
+  dplyr::left_join(
+    moderation_tests_wide,
+    by = "model_id"
+  ) |>
+  dplyr::arrange(
+    .data$model_order
+  )
+
+
+##### CHECK DIAGNOSIS CELL SIZES IN THE SES-COMPLETE SAMPLE #####
+
+moderation_dataset_file <- file.path(
+  mplus_input_dir,
+  "AMIS_mplus_dataset_m18_ses_mo.rds"
+)
+
+if (!file.exists(moderation_dataset_file)) {
+  stop(
+    "The final R dataset for the diagnosis cell-size check is missing: ",
+    moderation_dataset_file
+  )
+}
+
+moderation_dataset <- readRDS(
+  moderation_dataset_file
+)
+
+diagnosis_class_cells <- moderation_dataset |>
+  dplyr::filter(
+    .data$stat_t5 != 0,
+    .data$mo_cls >= 1,
+    .data$mo_cls <= 4,
+    !is.na(.data$diag_vor),
+    .data$diag_vor != -999,
+    !is.na(.data$aget2),
+    .data$aget2 != -999,
+    !is.na(.data$sext5),
+    .data$sext5 != -999,
+    !is.na(.data$sesausb),
+    .data$sesausb != -999
+  ) |>
+  dplyr::count(
+    .data$mo_cls,
+    .data$diag_vor,
+    name = "n",
+    .drop = FALSE
+  ) |>
+  dplyr::mutate(
+    class = dplyr::recode(
+      as.integer(
+        .data$mo_cls
+      ),
+      `1` = "Non-maltreated",
+      `2` = "Moderate/Early-increasing burden",
+      `3` = "Elevated/Declining burden",
+      `4` = "High/Rebound burden"
+    ),
+    diagnosis = dplyr::recode(
+      as.integer(
+        .data$diag_vor
+      ),
+      `0` = "No prior psychiatric diagnosis",
+      `1` = "Prior psychiatric diagnosis"
+    )
+  ) |>
+  dplyr::select(
+    mo_cls,
+    class,
+    diag_vor,
+    diagnosis,
+    n
+  ) |>
+  dplyr::arrange(
+    .data$mo_cls,
+    .data$diag_vor
+  )
+
+stopifnot(
+  sum(diagnosis_class_cells$n) == 512L,
+  identical(
+    diagnosis_class_cells$n,
+    c(
+      151L,
+      98L,
+      87L,
+      107L,
+      14L,
+      24L,
+      5L,
+      26L
+    )
+  )
+)
+
+
+##### SAVE AUDIT-READY RESULT INVENTORIES #####
+
+moderation_output_dir <- file.path(
+  supplement_dir,
+  "moderation_results"
+)
+
+dir.create(
+  moderation_output_dir,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+moderation_output_files <- c(
+  model_inventory = file.path(
+    moderation_output_dir,
+    "moderation_model_inventory.csv"
+  ),
+  separate_tests = file.path(
+    moderation_output_dir,
+    "moderation_separate_wald_tests.csv"
+  ),
+  simple_slopes = file.path(
+    moderation_output_dir,
+    "moderation_simple_slopes.csv"
+  ),
+  class_contrasts = file.path(
+    moderation_output_dir,
+    "moderation_class_contrasts.csv"
+  ),
+  diagnosis_cells = file.path(
+    moderation_output_dir,
+    "diagnosis_by_class_ses_complete_sample.csv"
+  )
+)
+
+utils::write.csv(
+  moderation_model_inventory,
+  moderation_output_files[["model_inventory"]],
+  row.names = FALSE,
+  na = ""
+)
+
+utils::write.csv(
+  moderation_separate_tests,
+  moderation_output_files[["separate_tests"]],
+  row.names = FALSE,
+  na = ""
+)
+
+utils::write.csv(
+  moderation_simple_slopes,
+  moderation_output_files[["simple_slopes"]],
+  row.names = FALSE,
+  na = ""
+)
+
+utils::write.csv(
+  moderation_class_contrasts,
+  moderation_output_files[["class_contrasts"]],
+  row.names = FALSE,
+  na = ""
+)
+
+utils::write.csv(
+  diagnosis_class_cells,
+  moderation_output_files[["diagnosis_cells"]],
+  row.names = FALSE,
+  na = ""
+)
+
+
+##### PREPARE COMPACT APA TABLE FOR PRIMARY MODELS #####
+
+primary_moderation_table <- moderation_separate_tests |>
+  dplyr::filter(
+    .data$model_id %in% c(
+      "M27b",
+      "M28b",
+      "M29b"
+    )
+  ) |>
+  dplyr::left_join(
+    moderation_model_results |>
+      dplyr::select(
+        model_id,
+        n,
+        global_chi_square,
+        global_df,
+        global_p_value
+      ),
+    by = "model_id"
+  ) |>
+  dplyr::mutate(
+    model_order = match(
+      .data$model_id,
+      c(
+        "M27b",
+        "M28b",
+        "M29b"
+      )
+    ),
+    outcome_order = match(
+      .data$test_id,
+      c(
+        "baseline_externalizing",
+        "baseline_emotional",
+        "change_externalizing",
+        "change_emotional"
+      )
+    )
+  ) |>
+  dplyr::arrange(
+    .data$model_order,
+    .data$outcome_order
+  ) |>
+  dplyr::group_by(
+    .data$model_id
+  ) |>
+  dplyr::mutate(
+    first_model_row = dplyr::row_number() == 1L,
+    Model = dplyr::if_else(
+      .data$first_model_row,
+      .data$model_id,
+      ""
+    ),
+    Moderator = dplyr::if_else(
+      .data$first_model_row,
+      .data$moderator,
+      ""
+    ),
+    N = dplyr::if_else(
+      .data$first_model_row,
+      format_integer_or_dash(
+        .data$n
+      ),
+      ""
+    ),
+    `Global chi-square (12 df)` = dplyr::if_else(
+      .data$first_model_row,
+      format_fit_number_or_dash(
+        .data$global_chi_square,
+        digits = 2L
+      ),
+      ""
+    ),
+    `Global p` = dplyr::if_else(
+      .data$first_model_row,
+      format_p_or_dash(
+        .data$global_p_value
+      ),
+      ""
+    ),
+    Outcome = .data$outcome,
+    `Outcome chi-square (3 df)` = format_fit_number_or_dash(
+      .data$chi_square,
+      digits = 2L
+    ),
+    `Outcome p` = format_p_or_dash(
+      .data$p_value
+    )
+  ) |>
+  dplyr::ungroup() |>
+  dplyr::select(
+    Model,
+    Moderator,
+    N,
+    `Global chi-square (12 df)`,
+    `Global p`,
+    Outcome,
+    `Outcome chi-square (3 df)`,
+    `Outcome p`
+  )
+
+primary_moderation_ft <- format_apa_table(
+  data = primary_moderation_table,
+  left_columns = c(
+    "Model",
+    "Moderator",
+    "Outcome"
+  ),
+  widths = c(
+    Model = 0.55,
+    Moderator = 1.55,
+    N = 0.48,
+    `Global chi-square (12 df)` = 0.90,
+    `Global p` = 0.58,
+    Outcome = 2.05,
+    `Outcome chi-square (3 df)` = 0.98,
+    `Outcome p` = 0.62
+  ),
+  font_size = 9
+)
+
+primary_moderation_ft <- flextable::italic(
+  primary_moderation_ft,
+  j = c(
+    "N",
+    "Global p",
+    "Outcome p"
+  ),
+  part = "header"
+)
+
+moderation_table_note <- paste(
+  "All models were adjusted for baseline age and sex.",
+  "The polygenic-score model additionally accounted for four",
+  "genetic ancestry components.",
+  "The global test evaluates whether any of the class differences",
+  "in the moderator associations are present across the four",
+  "outcomes together.",
+  "Each outcome-specific test evaluates whether the moderator",
+  "association differs between the non-maltreated reference group",
+  "and any of the three maltreatment-burden classes for that outcome.",
+  "Detailed class-specific associations and pairwise class",
+  "comparisons are provided in the accompanying result inventories."
+)
+
+moderation_table_output_file <- file.path(
+  moderation_output_dir,
+  "Table_SX_moderation_tests_APA.docx"
+)
+
+save_apa_table(
+  ft = primary_moderation_ft,
+  number = "SX",
+  title = paste(
+    "Moderation of Baseline Emotional and Externalizing Problems",
+    "and Latent Change by PRS-EAU, Hair Cortisol, and Prior Diagnosis"
+  ),
+  note = moderation_table_note,
+  target = moderation_table_output_file,
+  landscape = TRUE
+)
+
+message(
+  "Saved moderation result inventories and APA table to:\n",
+  moderation_output_dir
+)
+
+

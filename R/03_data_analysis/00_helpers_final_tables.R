@@ -538,9 +538,9 @@ save_apa_table <- function(
   }
   
   if (landscape) {
-    
-    landscape_section <- officer::block_section(
-      officer::prop_section(
+    doc <- officer::body_set_default_section(
+      doc,
+      value = officer::prop_section(
         page_size = officer::page_size(
           orient = "landscape",
           width = 11.69,
@@ -551,14 +551,8 @@ save_apa_table <- function(
           bottom = 0.40,
           left = 0.35,
           right = 0.35
-        ),
-        type = "continuous"
+        )
       )
-    )
-    
-    doc <- officer::body_end_block_section(
-      doc,
-      value = landscape_section
     )
   }
   
@@ -853,7 +847,7 @@ extract_tech3_covariance_matrix <- function(
     stop(
       paste(
         "TECHNICAL 3 OUTPUT is missing or occurs more than once.",
-        "Request TECH3 in the M18 OUTPUT section and rerun the model."
+        "Request TECH3 in the OUTPUT section and rerun the model."
       )
     )
   }
@@ -1060,6 +1054,864 @@ extract_tech3_covariance_matrix <- function(
   }
   
   covariance_matrix
+}
+
+
+#-------------------------------------------------------------------------
+##### MODERATION-MODEL OUTPUT HELPERS ####
+#-------------------------------------------------------------------------
+
+extract_tech1_additional_parameter_indices <- function(
+    output_lines,
+    parameter_names = NULL
+) {
+  section_start <- which(
+    trimws(output_lines) ==
+      "PARAMETER SPECIFICATION FOR THE ADDITIONAL PARAMETERS"
+  )
+
+  if (length(section_start) != 1L) {
+    stop(
+      paste(
+        "The TECH1 specification for additional parameters",
+        "could not be identified uniquely."
+      )
+    )
+  }
+
+  section_end <- which(
+    seq_along(output_lines) > section_start &
+      trimws(output_lines) == "STARTING VALUES"
+  )
+
+  if (length(section_end) < 1L) {
+    stop(
+      paste(
+        "The end of the TECH1 additional-parameter",
+        "specification could not be identified."
+      )
+    )
+  }
+
+  section_lines <- output_lines[
+    section_start:(section_end[1L] - 1L)
+  ]
+
+  block_starts <- which(
+    trimws(section_lines) == "New/Additional Parameters"
+  )
+
+  if (length(block_starts) < 1L) {
+    stop(
+      "No additional-parameter blocks were found in TECH1."
+    )
+  }
+
+  parameter_blocks <- lapply(
+    seq_along(block_starts),
+    function(block_number) {
+      block_start <- block_starts[block_number]
+
+      block_end <- if (
+        block_number < length(block_starts)
+      ) {
+        block_starts[block_number + 1L] - 1L
+      } else {
+        length(section_lines)
+      }
+
+      block_lines <- section_lines[
+        block_start:block_end
+      ]
+
+      nonempty_positions <- which(
+        nzchar(trimws(block_lines))
+      )
+
+      name_position <- nonempty_positions[
+        nonempty_positions > 1L
+      ][1L]
+
+      number_positions <- grep(
+        "^[[:space:]]*1(?:[[:space:]]+[0-9]+)+[[:space:]]*$",
+        block_lines,
+        perl = TRUE
+      )
+
+      number_positions <- number_positions[
+        number_positions > name_position
+      ]
+
+      if (
+        !is.finite(name_position) ||
+        length(number_positions) < 1L
+      ) {
+        stop(
+          "A TECH1 additional-parameter block could not be parsed."
+        )
+      }
+
+      names_in_block <- strsplit(
+        trimws(block_lines[name_position]),
+        "[[:space:]]+"
+      )[[1L]]
+
+      indices_in_block <- as.integer(
+        strsplit(
+          trimws(block_lines[number_positions[1L]]),
+          "[[:space:]]+"
+        )[[1L]][-1L]
+      )
+
+      if (
+        length(names_in_block) != length(indices_in_block) ||
+        anyNA(indices_in_block)
+      ) {
+        stop(
+          paste(
+            "Names and parameter numbers did not match in a",
+            "TECH1 additional-parameter block."
+          )
+        )
+      }
+
+      tibble::tibble(
+        parameter = names_in_block,
+        parameter_clean = clean_text(names_in_block),
+        tech3_index = indices_in_block
+      )
+    }
+  )
+
+  parameter_lookup <- dplyr::bind_rows(
+    parameter_blocks
+  )
+
+  if (
+    nrow(parameter_lookup) < 1L ||
+    anyDuplicated(parameter_lookup$parameter_clean) > 0L ||
+    anyDuplicated(parameter_lookup$tech3_index) > 0L
+  ) {
+    stop(
+      paste(
+        "The TECH1 additional-parameter mapping",
+        "is empty or duplicated."
+      )
+    )
+  }
+
+  if (!is.null(parameter_names)) {
+    requested_names <- clean_text(parameter_names)
+    requested_positions <- match(
+      requested_names,
+      parameter_lookup$parameter_clean
+    )
+
+    if (anyNA(requested_positions)) {
+      stop(
+        "TECH1 indices were not found for: ",
+        paste(
+          parameter_names[is.na(requested_positions)],
+          collapse = ", "
+        )
+      )
+    }
+
+    parameter_lookup <- parameter_lookup[
+      requested_positions,
+      ,
+      drop = FALSE
+    ]
+  }
+
+  parameter_lookup
+}
+
+
+extract_global_wald_test <- function(output_lines) {
+  section_start <- which(
+    trimws(output_lines) ==
+      "Wald Test of Parameter Constraints"
+  )
+
+  if (length(section_start) != 1L) {
+    stop(
+      paste(
+        "The global Wald test could not be",
+        "identified uniquely."
+      )
+    )
+  }
+
+  section_lines <- output_lines[
+    section_start:min(
+      section_start + 15L,
+      length(output_lines)
+    )
+  ]
+
+  extract_last_numeric_value <- function(pattern) {
+    matching_lines <- grep(
+      pattern,
+      section_lines,
+      value = TRUE
+    )
+
+    if (length(matching_lines) < 1L) {
+      stop(
+        "A global Wald-test statistic could not be read: ",
+        pattern
+      )
+    }
+
+    last_token <- tail(
+      strsplit(
+        trimws(matching_lines[1L]),
+        "[[:space:]]+"
+      )[[1L]],
+      1L
+    )
+
+    as.numeric(
+      gsub(
+        "[dD]",
+        "E",
+        sub("\\*$", "", last_token)
+      )
+    )
+  }
+
+  tibble::tibble(
+    test = "All class-by-moderator interactions",
+    chi_square = extract_last_numeric_value(
+      "^[[:space:]]*Value[[:space:]]+"
+    ),
+    df = as.integer(
+      extract_last_numeric_value(
+        "^[[:space:]]*Degrees of Freedom[[:space:]]+"
+      )
+    ),
+    p_value = extract_last_numeric_value(
+      "^[[:space:]]*P-Value[[:space:]]+"
+    )
+  )
+}
+
+
+extract_moderation_parameter_rows <- function(
+    model,
+    parameter_names
+) {
+  parameters <- parameter_table(model) |>
+    dplyr::filter(
+      grepl(
+        "NEW|ADDITIONAL",
+        .data$header_clean
+      )
+    )
+
+  requested_names <- clean_text(parameter_names)
+  parameter_positions <- match(
+    requested_names,
+    parameters$param_clean
+  )
+
+  if (
+    anyNA(parameter_positions) ||
+    anyDuplicated(parameters$param_clean) > 0L
+  ) {
+    stop(
+      "Additional-parameter estimates were not found uniquely for: ",
+      paste(
+        parameter_names[is.na(parameter_positions)],
+        collapse = ", "
+      )
+    )
+  }
+
+  parameters[
+    parameter_positions,
+    ,
+    drop = FALSE
+  ]
+}
+
+
+extract_moderation_warning_summary <- function(output_lines) {
+  output_text <- paste(
+    output_lines,
+    collapse = "\n"
+  )
+
+  output_text_upper <- toupper(
+    output_text
+  )
+
+  extract_first_capture <- function(pattern) {
+    match_result <- regexec(
+      pattern,
+      output_text,
+      ignore.case = TRUE,
+      perl = TRUE
+    )
+
+    capture <- regmatches(
+      output_text,
+      match_result
+    )[[1L]]
+
+    if (length(capture) < 2L) {
+      return(NA_character_)
+    }
+
+    trimws(capture[2L])
+  }
+
+  normal_termination <- grepl(
+    "THE MODEL ESTIMATION TERMINATED NORMALLY",
+    output_text_upper,
+    fixed = TRUE
+  )
+
+  missing_x_n <- suppressWarnings(
+    as.integer(
+      extract_first_capture(
+        paste0(
+          "Number of cases with missing on x-variables:",
+          "\\s+([0-9]+)"
+        )
+      )
+    )
+  )
+
+  low_covariance_coverage <- grepl(
+    "LOW COVARIANCE COVERAGE",
+    output_text_upper,
+    fixed = TRUE
+  )
+
+  robust_chi_square_unavailable <- grepl(
+    "THE ROBUST CHI-SQUARE COULD NOT BE COMPUTED",
+    output_text_upper,
+    fixed = TRUE
+  )
+
+  residual_covariance_warning <- grepl(
+    "RESIDUAL COVARIANCE MATRIX (THETA) IS NOT POSITIVE DEFINITE",
+    output_text_upper,
+    fixed = TRUE
+  )
+
+  derivative_matrix_warning <- grepl(
+    paste0(
+      "NON-POSITIVE DEFINITE\\s+",
+      "FIRST-ORDER DERIVATIVE PRODUCT MATRIX"
+    ),
+    output_text_upper,
+    perl = TRUE
+  )
+
+  nonreplicated_solution <- grepl(
+    "BEST LOGLIKELIHOOD VALUE WAS NOT REPLICATED",
+    output_text_upper,
+    fixed = TRUE
+  )
+
+  residual_problem_variable <- extract_first_capture(
+    "PROBLEM INVOLVING VARIABLE\\s+([A-Z0-9_]+)"
+  )
+
+  problem_parameter <- extract_first_capture(
+    "Parameter\\s+[0-9]+,\\s*([^\\r\\n]+)"
+  )
+
+  warning_messages <- character()
+
+  if (!is.na(missing_x_n)) {
+    warning_messages <- c(
+      warning_messages,
+      paste0(
+        "Cases with incomplete predictor or covariate data were excluded (n = ",
+        missing_x_n,
+        ")."
+      )
+    )
+  }
+
+  if (low_covariance_coverage) {
+    warning_messages <- c(
+      warning_messages,
+      "Low covariance coverage was reported."
+    )
+  }
+
+  if (robust_chi_square_unavailable) {
+    warning_messages <- c(
+      warning_messages,
+      "The robust model chi-square was unavailable."
+    )
+  }
+
+  if (residual_covariance_warning) {
+    residual_message <- paste(
+      "The residual covariance matrix was not positive definite."
+    )
+
+    if (!is.na(residual_problem_variable)) {
+      residual_message <- paste0(
+        residual_message,
+        " Problem variable: ",
+        residual_problem_variable,
+        "."
+      )
+    }
+
+    warning_messages <- c(
+      warning_messages,
+      residual_message
+    )
+  }
+
+  if (derivative_matrix_warning) {
+    derivative_message <- paste(
+      "The first-order derivative product matrix was not",
+      "positive definite."
+    )
+
+    if (!is.na(problem_parameter)) {
+      derivative_message <- paste0(
+        derivative_message,
+        " Problem parameter: ",
+        problem_parameter,
+        "."
+      )
+    }
+
+    warning_messages <- c(
+      warning_messages,
+      derivative_message
+    )
+  }
+
+  if (nonreplicated_solution) {
+    warning_messages <- c(
+      warning_messages,
+      "The best loglikelihood value was not replicated."
+    )
+  }
+
+  critical_warning <-
+    low_covariance_coverage ||
+    residual_covariance_warning ||
+    derivative_matrix_warning ||
+    nonreplicated_solution
+
+  technical_status <- dplyr::case_when(
+    !normal_termination ~ "Did not terminate normally",
+    critical_warning ~ "Converged; warning requires review",
+    TRUE ~ "Converged; no critical warning"
+  )
+
+  tibble::tibble(
+    normal_termination = normal_termination,
+    missing_x_n = missing_x_n,
+    low_covariance_coverage = low_covariance_coverage,
+    robust_chi_square_unavailable =
+      robust_chi_square_unavailable,
+    residual_covariance_warning =
+      residual_covariance_warning,
+    derivative_matrix_warning =
+      derivative_matrix_warning,
+    nonreplicated_solution = nonreplicated_solution,
+    problem_parameter = dplyr::coalesce(
+      problem_parameter,
+      residual_problem_variable
+    ),
+    technical_status = technical_status,
+    technical_warnings = if (
+      length(warning_messages) == 0L
+    ) {
+      "None"
+    } else {
+      paste(
+        warning_messages,
+        collapse = " "
+      )
+    }
+  )
+}
+
+
+extract_moderation_model_results <- function(
+    output_file,
+    model_id,
+    moderator,
+    adjustment,
+    sample_filter,
+    covariates,
+    analysis_role
+) {
+  if (!file.exists(output_file)) {
+    stop(
+      "Mplus moderation output not found: ",
+      output_file
+    )
+  }
+
+  output_lines <- readLines(
+    output_file,
+    warn = FALSE
+  )
+
+  model <- MplusAutomation::readModels(
+    output_file,
+    what = c(
+      "summaries",
+      "parameters",
+      "warn_err"
+    ),
+    quiet = TRUE
+  )
+
+  model_errors <- unlist(
+    model$errors,
+    use.names = FALSE
+  )
+
+  normal_termination_in_output <- any(
+    grepl(
+      "THE MODEL ESTIMATION TERMINATED NORMALLY",
+      output_lines,
+      fixed = TRUE
+    )
+  )
+
+  if (
+    length(model_errors) > 0L &&
+    !normal_termination_in_output
+  ) {
+    stop(
+      "Mplus errors found in ",
+      output_file,
+      ":\n",
+      paste(
+        model_errors,
+        collapse = "\n"
+      )
+    )
+  }
+
+  if (
+    is.null(model$summaries) ||
+    nrow(model$summaries) != 1L
+  ) {
+    stop(
+      "Expected exactly one Mplus summary in: ",
+      output_file
+    )
+  }
+
+  global_test <- extract_global_wald_test(
+    output_lines
+  )
+
+  warning_summary <- extract_moderation_warning_summary(
+    output_lines
+  )
+
+  test_definitions <- tibble::tribble(
+    ~test_id, ~outcome, ~parameter_prefix,
+    "baseline_externalizing",
+    "Externalizing problems at baseline",
+    "IBE",
+    "baseline_emotional",
+    "Emotional problems at baseline",
+    "IBM",
+    "change_externalizing",
+    "Change in externalizing problems",
+    "IDX",
+    "change_emotional",
+    "Change in emotional problems",
+    "IDM"
+  )
+
+  interaction_parameter_names <- unlist(
+    lapply(
+      test_definitions$parameter_prefix,
+      function(parameter_prefix) {
+        paste0(
+          parameter_prefix,
+          c(
+            "_2V1",
+            "_3V1",
+            "_4V1"
+          )
+        )
+      }
+    ),
+    use.names = FALSE
+  )
+
+  parameter_estimates <- extract_moderation_parameter_rows(
+    model,
+    interaction_parameter_names
+  )
+
+  parameter_indices <-
+    extract_tech1_additional_parameter_indices(
+      output_lines,
+      interaction_parameter_names
+    )
+
+  covariance_matrix <- extract_tech3_covariance_matrix(
+    output_lines
+  )
+
+  separate_tests <- purrr::pmap_dfr(
+    test_definitions,
+    function(
+      test_id,
+      outcome,
+      parameter_prefix
+    ) {
+      requested_names <- paste0(
+        parameter_prefix,
+        c(
+          "_2V1",
+          "_3V1",
+          "_4V1"
+        )
+      )
+
+      requested_positions <- match(
+        clean_text(requested_names),
+        clean_text(interaction_parameter_names)
+      )
+
+      estimates <- as.numeric(
+        parameter_estimates$est[
+          requested_positions
+        ]
+      )
+
+      covariance_indices <- parameter_indices$tech3_index[
+        requested_positions
+      ]
+
+      parameter_covariance <- covariance_matrix[
+        covariance_indices,
+        covariance_indices,
+        drop = FALSE
+      ]
+
+      wald_statistic <- as.numeric(
+        t(estimates) %*%
+          solve(
+            parameter_covariance,
+            estimates
+          )
+      )
+
+      tibble::tibble(
+        test_id = test_id,
+        outcome = outcome,
+        chi_square = wald_statistic,
+        df = length(estimates),
+        p_value = stats::pchisq(
+          wald_statistic,
+          df = length(estimates),
+          lower.tail = FALSE
+        )
+      )
+    }
+  )
+
+  class_lookup <- tibble::tribble(
+    ~class_number, ~class_label,
+    1L, "Non-maltreated",
+    2L, "Moderate/Early-increasing burden",
+    3L, "Elevated/Declining burden",
+    4L, "High/Rebound burden"
+  )
+
+  slope_definitions <- tibble::tribble(
+    ~outcome_id, ~outcome, ~parameter_prefix,
+    "baseline_externalizing",
+    "Externalizing problems at baseline",
+    "SBE",
+    "baseline_emotional",
+    "Emotional problems at baseline",
+    "SBM",
+    "change_externalizing",
+    "Change in externalizing problems",
+    "SDX",
+    "change_emotional",
+    "Change in emotional problems",
+    "SDM"
+  )
+
+  simple_slopes <- purrr::pmap_dfr(
+    slope_definitions,
+    function(
+      outcome_id,
+      outcome,
+      parameter_prefix
+    ) {
+      parameter_names <- paste0(
+        parameter_prefix,
+        "_C",
+        class_lookup$class_number
+      )
+
+      estimates <- extract_moderation_parameter_rows(
+        model,
+        parameter_names
+      )
+
+      tibble::tibble(
+        outcome_id = outcome_id,
+        outcome = outcome,
+        class_number = class_lookup$class_number,
+        class_label = class_lookup$class_label,
+        parameter = parameter_names,
+        estimate = as.numeric(estimates$est),
+        standard_error = as.numeric(estimates$se),
+        ci_lower = estimate - 1.96 * standard_error,
+        ci_upper = estimate + 1.96 * standard_error,
+        standardized_estimate = NA_real_,
+        p_value = as.numeric(estimates$pval)
+      )
+    }
+  )
+
+  contrast_lookup <- tibble::tribble(
+    ~contrast_code, ~class_a, ~class_b,
+    "2V1", 2L, 1L,
+    "3V1", 3L, 1L,
+    "4V1", 4L, 1L,
+    "3V2", 3L, 2L,
+    "4V2", 4L, 2L,
+    "4V3", 4L, 3L
+  ) |>
+    dplyr::left_join(
+      class_lookup |>
+        dplyr::rename(
+          class_a = class_number,
+          class_a_label = class_label
+        ),
+      by = "class_a"
+    ) |>
+    dplyr::left_join(
+      class_lookup |>
+        dplyr::rename(
+          class_b = class_number,
+          class_b_label = class_label
+        ),
+      by = "class_b"
+    ) |>
+    dplyr::mutate(
+      contrast = paste(
+        .data$class_a_label,
+        "vs.",
+        .data$class_b_label
+      )
+    )
+
+  contrast_definitions <- tibble::tribble(
+    ~outcome_id, ~outcome, ~parameter_prefix,
+    "baseline_externalizing",
+    "Externalizing problems at baseline",
+    "IBE",
+    "baseline_emotional",
+    "Emotional problems at baseline",
+    "IBM",
+    "change_externalizing",
+    "Change in externalizing problems",
+    "IDX",
+    "change_emotional",
+    "Change in emotional problems",
+    "IDM"
+  )
+
+  class_contrasts <- purrr::pmap_dfr(
+    contrast_definitions,
+    function(
+      outcome_id,
+      outcome,
+      parameter_prefix
+    ) {
+      parameter_names <- paste0(
+        parameter_prefix,
+        "_",
+        contrast_lookup$contrast_code
+      )
+
+      estimates <- extract_moderation_parameter_rows(
+        model,
+        parameter_names
+      )
+
+      tibble::tibble(
+        outcome_id = outcome_id,
+        outcome = outcome,
+        contrast_code = contrast_lookup$contrast_code,
+        contrast = contrast_lookup$contrast,
+        parameter = parameter_names,
+        estimate = as.numeric(estimates$est),
+        standard_error = as.numeric(estimates$se),
+        ci_lower = estimate - 1.96 * standard_error,
+        ci_upper = estimate + 1.96 * standard_error,
+        standardized_estimate = NA_real_,
+        p_value = as.numeric(estimates$pval)
+      )
+    }
+  )
+
+  model_information <- tibble::tibble(
+    model_id = model_id,
+    output_file = normalizePath(
+      output_file,
+      winslash = "/",
+      mustWork = TRUE
+    ),
+    moderator = moderator,
+    sample_filter = sample_filter,
+    n = as.integer(
+      model$summaries$Observations[1L]
+    ),
+    estimator = "MLR",
+    adjustment = adjustment,
+    covariates = covariates,
+    analysis_role = analysis_role,
+    global_chi_square = global_test$chi_square,
+    global_df = global_test$df,
+    global_p_value = global_test$p_value
+  ) |>
+    dplyr::bind_cols(
+      warning_summary
+    )
+
+  list(
+    model = model_information,
+    separate_tests = separate_tests |>
+      dplyr::mutate(
+        model_id = model_id,
+        moderator = moderator,
+        .before = 1L
+      ),
+    simple_slopes = simple_slopes |>
+      dplyr::mutate(
+        model_id = model_id,
+        moderator = moderator,
+        .before = 1L
+      ),
+    class_contrasts = class_contrasts |>
+      dplyr::mutate(
+        model_id = model_id,
+        moderator = moderator,
+        .before = 1L
+      )
+  )
 }
 
 ##### DEFINE PANEL-B FORMATTING HELPERS #####
